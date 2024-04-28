@@ -1,0 +1,15 @@
+@DocumentAPI_HostAddress = http://localhost:5084
+
+POST {{DocumentAPI_HostAddress}}/sec-parser/
+Accept: application/json
+{
+    "SecDocumenUrls": ["url1", "url2"],
+    "SecDocumentTypeEnum": 1
+}
+
+###
+
+GET {{DocumentAPI_HostAddress}}/batch-get-sec-urls?startDateTime=2022-01-01T00:00:00&endDateTime=2022-12-31T23:59:59&documentType=1&company=1
+Accept: application/json
+
+###
