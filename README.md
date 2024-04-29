@@ -2,7 +2,7 @@
 Document API is a simple tool designed to parse SEC (Securities and Exchange Commission) EDGAR data. It is built using the latest .NET 8 Minimal API, providing a lean and efficient framework for building HTTP APIs.  
 ## Features
 - Parses SEC documents and extracts relevant data. (build in progress)
-- Use LLM to create a chatbot to answer questions from sec documents. (coming soon)
+- Use LLM to develop a chatbot capable of interpreting and responding to queries based on information extracted from SEC documents. (coming soon)
 ## How to Run the Project
 1. Ensure you have .NET 8 SDK installed on your machine. You can download it from the official .NET website.  
 2. Clone the repository which will open the solution:  <pre>git clone https://github.com/your-repo/DocumentAPI.git </pre>
