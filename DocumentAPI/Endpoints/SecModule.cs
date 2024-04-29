@@ -31,12 +31,12 @@ public class SecModule: CarterModule
             HttpRequest request,
             [FromQuery(Name = "documentType")] SecFormTypeEnum formType,
             [FromQuery(Name = "company")] SecCompanyEnum company,
-            [FromQuery(Name = "startDate")] string startDateTime,
+            [FromQuery(Name = "startDate")] string startDate,
             [FromQuery(Name = "endDate")] string endDate
         ) => await service.BatchGetDocumentUrls(new SecBatchGetUrlsRequest
         {
-            FormTypeEnum = formType, CompanyEnum = company, StartDate = startDateTime,
-            EndDate = startDateTime
+            FormTypeEnum = formType, CompanyEnum = company, StartDate = startDate,
+            EndDate = endDate
         }));
     }
 }

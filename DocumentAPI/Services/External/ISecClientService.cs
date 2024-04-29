@@ -6,6 +6,5 @@ public interface ISecClientService
 {
     public Task<string> MakeSecRequest(string url);
 
-    public Task<SecSearchResponse> MakeSecSearchRequest(SecFormTypeEnum formType, SecCompanyEnum company,
-        string startDate, string endDate);
+    public Task<SecSearchResponse> MakeSecSearchRequest(SecBatchGetUrlsRequest request);
 }

@@ -64,7 +64,7 @@ public class SecService: ISecService
 
     public async Task<IResult> BatchGetDocumentUrls(SecBatchGetUrlsRequest request)
     {
-        var secUrls = GenerateSecUrls(request);
+        var secUrls = await GetSecUrls(request);
 
         // Save to file
         var formType = request.FormTypeEnum.GetDescription();
@@ -78,9 +78,10 @@ public class SecService: ISecService
         return Results.Ok(secUrls); 
     }
 
-    private IEnumerable<string> GenerateSecUrls(SecBatchGetUrlsRequest request)
+    private async Task<List<string>> GetSecUrls(SecBatchGetUrlsRequest request)
     {
-        throw new NotImplementedException();
+        var data = await _secClient.MakeSecSearchRequest(request);
+        return null;
     }
 
     private async Task ProcessUrl(SecDocumentsParserRequest request, string url, List<SecDocumentData> responseData)

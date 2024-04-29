@@ -1,3 +1,4 @@
+using DocumentAPI.Common.Extensions;
 using DocumentAPI.Common.HttpClientFactory;
 using DocumentAPI.Models.Common;
 using DocumentAPI.Models.SEC;
@@ -32,9 +33,10 @@ public class SecClientService: ISecClientService
         return content;
     }
 
-    public async Task<SecSearchResponse> MakeSecSearchRequest(SecFormTypeEnum formType, SecCompanyEnum company, string startDate, string endDate)
+    public async Task<SecSearchResponse> MakeSecSearchRequest(SecBatchGetUrlsRequest request)
     {
-        var requestMessage = new HttpRequestMessage(HttpMethod.Get,string.Format(_secSearchUrl, formType, company, startDate, endDate));
+        
+        var requestMessage = new HttpRequestMessage(HttpMethod.Get,string.Format(_secSearchUrl, request.FormTypeEnum.GetDescription(), request.CompanyEnum.GetDescription(), request.StartDate, request.EndDate));
         AddSecHeaders(requestMessage);
         var data = await _httpClientWrapper.MakeRequestAsync<string,SecSearchResponse>(requestMessage,SEC);
         return data;
