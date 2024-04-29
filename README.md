@@ -11,6 +11,7 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
     <pre>{"SecUserAgent": "Personal-Project/1.0 (+{{your email}@gmail.com)"}</pre>
 
 4. Run the project.
+   
    <img src="./swagger.png" width="50%" height="50%">
 
 ## How It was built
