@@ -16,11 +16,11 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
 
 ## How It was built
 ### Analysis
-1. Understand the data
+1. Data
    - Schema: https://www.sec.gov/files/form10-k.pdf / https://sec-api.io/docs/sec-filings-item-extraction-api
    - Scraping rule: https://www.sec.gov/os/webmaster-faq#developers
    - Search: https://www.sec.gov/edgar/search/#/q=Microsoft&category=custom&forms=10-K
-2. Understand the requirement
+2. Requirement
    - Start from 10K and 10Q forms.
    - Extract the specific sections from the forms.
    - Do a load testing, say 200 documents.
