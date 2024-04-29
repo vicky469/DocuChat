@@ -19,12 +19,23 @@ public class SecDocumentsParserRequest
     }
 }
 
-public class SecDocumentData
+public class SecDocumentsParserResponse
 {
     public string SecDocumentType { get; set; }
+    public int TotalItems { get; set; }
+    public List<SecDocumentData> Data { get; set; }
+    public int CountTotalItems()
+    {
+        return Data.SelectMany(d => d.Items).Count();
+    }
+}
+
+public class SecDocumentData
+{
     public string SecDocumentUrl { get; set; }
     public List<Sec10KIndexDTO> Items { get; set; }
 }
+
 public class Sec10KIndexDTO
 {
     public string Item{ get; set; }

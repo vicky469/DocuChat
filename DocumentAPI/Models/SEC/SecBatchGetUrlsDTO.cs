@@ -2,8 +2,8 @@ namespace DocumentAPI.Models.SEC;
 
 public class SecBatchGetUrlsRequest
 {
-    public DateTime? StartDateTime { get; set; }
-    public DateTime? EndDateTime { get; set; }
+    public string StartDate { get; set; }
+    public string EndDate { get; set; }
     public SecFormTypeEnum FormTypeEnum { get; set; }
     public SecCompanyEnum CompanyEnum { get; set; }
 }

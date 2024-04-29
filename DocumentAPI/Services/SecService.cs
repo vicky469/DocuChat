@@ -21,29 +21,34 @@ public class SecService: ISecService
     }
     public async Task<IResult> ParseDocuments(SecDocumentsParserRequest request)
     {
-        var response = new List<SecDocumentData>();
+        var response = new SecDocumentsParserResponse
+        {
+            SecDocumentType = request.SecDocumentTypeEnum.GetDescription()
+        };
+        var data = new List<SecDocumentData>(); 
         var urlChunks = Utils.SplitIntoChunks(request.SecDocumentUrls);
         foreach (var urlChunk in urlChunks)
         {
-            var tasks = urlChunk.Select(url => ProcessUrl(request, url, response));
+            var tasks = urlChunk.Select(url => ProcessUrl(request, url, data));
             await Task.WhenAll(tasks);
         }
         
         // Filter the response based on the callingApp
-        response = FilterResponse(response);
+        response.Data = FilterResponse(data);
+        response.TotalItems = response.CountTotalItems();
         return Results.Ok(response);
     }
 
-    private List<SecDocumentData> FilterResponse(List<SecDocumentData> response)
+    private List<SecDocumentData> FilterResponse(List<SecDocumentData> data)
     {
         var callingApp = GetCallingApp();
-        if(callingApp == null) return response;
+        if(callingApp == null) return data;
         
-        if (string.Equals(callingApp, CallingAppEnum.Cybersyn.GetDescription(), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(callingApp, CallingAppEnum.CompanyA.GetDescription(), StringComparison.OrdinalIgnoreCase))
         {
-            response = FilterForCybersyn(response);
+            data = FilterForCompanyA(data);
         }
-        return response;
+        return data;
     }
 
     private string? GetCallingApp()
@@ -78,11 +83,10 @@ public class SecService: ISecService
         throw new NotImplementedException();
     }
 
-    private async Task ProcessUrl(SecDocumentsParserRequest request, string url, List<SecDocumentData> response)
+    private async Task ProcessUrl(SecDocumentsParserRequest request, string url, List<SecDocumentData> responseData)
     {
         var data = new SecDocumentData
         {
-            SecDocumentType= request.SecDocumentTypeEnum.GetDescription(),
             SecDocumentUrl = url
         };
         try
@@ -97,7 +101,7 @@ public class SecService: ISecService
                 if (data.Items.Any())
                 {
                     await SaveJsonToFile(data.Items, url);
-                    response.Add(data);
+                    responseData.Add(data);
                 }
             }
         }
@@ -252,7 +256,7 @@ public class SecService: ISecService
         return hrefs;
     }
     
-    private List<SecDocumentData> FilterForCybersyn(List<SecDocumentData> data)
+    private List<SecDocumentData> FilterForCompanyA(List<SecDocumentData> data)
     {
         var sectionsToInclude = new List<Sec10KFormSectionEnum>
         {

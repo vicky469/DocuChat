@@ -1,9 +1,6 @@
-using System.Net;
 using DocumentAPI.Common.HttpClientFactory;
 using DocumentAPI.Models.Common;
 using DocumentAPI.Models.SEC;
-using Microsoft.Net.Http.Headers;
-using StringWithQualityHeaderValue = System.Net.Http.Headers.StringWithQualityHeaderValue;
 
 namespace DocumentAPI.Services.External;
 

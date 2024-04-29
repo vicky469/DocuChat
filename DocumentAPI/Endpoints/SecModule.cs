@@ -3,7 +3,6 @@ using Carter.ModelBinding;
 using DocumentAPI.Models.SEC;
 using DocumentAPI.Services;
 using Microsoft.AspNetCore.Mvc;
-using DateTime = System.DateTime;
 
 namespace DocumentAPI.Endpoints;
 
@@ -32,12 +31,12 @@ public class SecModule: CarterModule
             HttpRequest request,
             [FromQuery(Name = "documentType")] SecFormTypeEnum formType,
             [FromQuery(Name = "company")] SecCompanyEnum company,
-            [FromQuery(Name = "startDateTime")] DateTime? startDateTime,
-            [FromQuery(Name = "endDateTime")] DateTime? endDateTime
+            [FromQuery(Name = "startDate")] string startDateTime,
+            [FromQuery(Name = "endDate")] string endDate
         ) => await service.BatchGetDocumentUrls(new SecBatchGetUrlsRequest
         {
-            FormTypeEnum = formType, CompanyEnum = company, StartDateTime = startDateTime,
-            EndDateTime = endDateTime
+            FormTypeEnum = formType, CompanyEnum = company, StartDate = startDateTime,
+            EndDate = startDateTime
         }));
     }
 }

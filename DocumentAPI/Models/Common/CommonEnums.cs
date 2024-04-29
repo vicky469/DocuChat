@@ -4,6 +4,6 @@ namespace DocumentAPI.Models.Common;
 
 public enum CallingAppEnum
 {
-    [Description("cybersyn")]
-    Cybersyn = 1
+    [Description("CompanyA")]
+    CompanyA = 1
 }
