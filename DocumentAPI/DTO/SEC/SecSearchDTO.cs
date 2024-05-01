@@ -1,4 +1,4 @@
-namespace DocumentAPI.Models.SEC;
+namespace DocumentAPI.DTO.SEC;
 
 public class SecSearchResponseDTO
 {

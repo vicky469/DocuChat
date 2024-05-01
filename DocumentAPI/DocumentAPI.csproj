@@ -8,8 +8,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="AutoMapper" Version="13.0.1" />
         <PackageReference Include="Carter" Version="8.0.0" />
         <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+        <PackageReference Include="Google.Cloud.AutoML.V1" Version="3.3.0" />
         <PackageReference Include="HtmlAgilityPack" Version="1.11.60" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.4"/>
         <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="9.0.0-preview.3.24172.13" />
@@ -22,7 +24,22 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Data\Result\" />
+      <_ContentIncludedByDefault Remove="Data\company_tickers.json" />
+      <_ContentIncludedByDefault Remove="Data\Result\aapl-20200926.json" />
+      <_ContentIncludedByDefault Remove="Data\Result\aapl-20210925.json" />
+      <_ContentIncludedByDefault Remove="Data\Result\aapl-20220924.json" />
+      <_ContentIncludedByDefault Remove="Data\Result\aapl-20230930.json" />
+      <_ContentIncludedByDefault Remove="Data\Result\tsla-20231231.json" />
+      <_ContentIncludedByDefault Remove="Infrastructure\Data\company_tickers.json" />
+      <_ContentIncludedByDefault Remove="Infrastructure\Data\Result\aapl-20200926.json" />
+      <_ContentIncludedByDefault Remove="Infrastructure\Data\Result\aapl-20210925.json" />
+      <_ContentIncludedByDefault Remove="Infrastructure\Data\Result\aapl-20220924.json" />
+      <_ContentIncludedByDefault Remove="Infrastructure\Data\Result\aapl-20230930.json" />
+      <_ContentIncludedByDefault Remove="Infrastructure\Data\Result\tsla-20231231.json" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Data\Batch Urls\" />
     </ItemGroup>
 
 </Project>

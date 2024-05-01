@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace DocumentAPI.Models.SEC;
+namespace DocumentAPI.DTO.SEC;
 
 public enum SecFormTypeEnum
 {
@@ -10,70 +10,71 @@ public enum SecFormTypeEnum
     [Description("10-Q")]
     Sec10Q = 2,
 }
+
 public enum Sec10KFormSectionEnum
 {
     [Description("Business")]
-    Sec1 = 1,
+    Item1 = 1,
 
     [Description("Risk Factors")]
-    Sec1A = 2,
+    Item1A = 2,
 
     [Description("Unresolved Staff Comments")]
-    Sec1B = 3,
+    Item1B = 3,
 
     [Description("Cybersecurity")]
-    Sec1C = 4,
+    Item1C = 4,
 
     [Description("Properties")]
-    Sec2 = 5,
+    Item2 = 5,
 
     [Description("Legal Proceedings")]
-    Sec3 = 6,
+    Item3 = 6,
 
     [Description("Mine Safety Disclosures")]
-    Sec4 = 7,
+    Item4 = 7,
 
     [Description("Market for Registrant’s Common Equity, Related Stockholder Matters and Issuer Purchases of Equity Securities")]
-    Sec5 = 8,
+    Item5 = 8,
 
     [Description("Selected Financial Data")]
-    Sec6 = 9,
+    Item6 = 9,
 
     [Description("Management’s Discussion and Analysis of Financial Condition and Results of Operations")]
-    Sec7 = 10,
+    Item7 = 10,
 
     [Description("Quantitative and Qualitative Disclosures about Market Risk")]
-    Sec7A = 11,
+    Item7A = 11,
 
     [Description("Financial Statements and Supplementary Data")]
-    Sec8 = 12,
+    Item8 = 12,
 
     [Description("Changes in and Disagreements with Accountants on Accounting and Financial Disclosure")]
-    Sec9 = 13,
+    Item9 = 13,
 
     [Description("Controls and Procedures")]
-    Sec9A = 14,
+    Item9A = 14,
 
     [Description("Other Information")]
-    Sec9B = 15,
+    Item9B = 15,
 
     [Description("Directors, Executive Officers and Corporate Governance")]
-    Sec10 = 16,
+    Item10 = 16,
 
     [Description("Executive Compensation")]
-    Sec11 = 17,
+    Item11 = 17,
 
     [Description("Security Ownership of Certain Beneficial Owners and Management and Related Stockholder Matters")]
-    Sec12 = 18,
+    Item12 = 18,
 
     [Description("Certain Relationships and Related Transactions, and Director Independence")]
-    Sec13 = 19,
+    Item13 = 19,
 
-    [Description("Principal Accountant Fees and Services")]
-    Sec14 = 20,
+    [Description("Principal Accountant Fees and Service")]
+    Item14 = 20,
 
     [Description("Exhibits and Financial Statement Schedules")]
-    Sec15 = 21
+    Item15 = 21
 }
 
 public enum SecCompanyEnum
@@ -90,8 +91,8 @@ public enum SecCompanyEnum
     [Description("Alphabet Inc.")]
     Alphabet = 4,
 
-    [Description("Facebook Inc.")]
-    Facebook = 5,
+    [Description("Meta Platforms, Inc.")]
+    Meta = 5,
 
     [Description("Tesla Inc.")]
     Tesla = 6,

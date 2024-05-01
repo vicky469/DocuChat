@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using FluentValidation;
 
-namespace DocumentAPI.Models.SEC;
+namespace DocumentAPI.DTO.SEC;
 
 public class SecDocumentsParserRequest
 {
@@ -33,6 +33,7 @@ public class SecDocumentsParserResponse
 public class SecDocumentData
 {
     public string SecDocumentUrl { get; set; }
+    public int ItemsCnt { get; set; }
     public List<Sec10KIndexDTO> Items { get; set; }
 }
 

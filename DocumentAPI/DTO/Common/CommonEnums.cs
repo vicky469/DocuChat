@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace DocumentAPI.Models.Common;
+namespace DocumentAPI.DTO.Common;
 
 public enum CallingAppEnum
 {

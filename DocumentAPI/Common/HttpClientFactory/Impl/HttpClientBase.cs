@@ -5,51 +5,37 @@ namespace DocumentAPI.Common.HttpClientFactory.Impl;
 
 public class HttpClientBase : IHttpClient
 {
-    private readonly IWebClientConfig _clientConfig;
     private readonly IHttpClientFactory _clientFactory;
 
     public HttpClientBase(IHttpClientFactory clientFactory, IWebClientConfig clientConfig)
     {
         _clientFactory = clientFactory;
-        _clientConfig = clientConfig;
     }
 
-    public async Task<HttpClientResponse<TResponse>> SendAsync<TRequest, TResponse>(
+    public async Task<TResponse> SendAsync<TRequest, TResponse>(
         HttpRequestMessage requestMessage,
         string clientName = default,
-        TRequest body = default) where TRequest : class where TResponse : class
+        TRequest body = default,
+        JsonSerializerSettings settings = default) where TRequest : class where TResponse : class
     {
-        HttpClientResponse<TResponse> res = null;
-        try
-        {
-            var client = _clientFactory.CreateClient(clientName);
-            var request = PreProcess(requestMessage, body, clientName);
-            var httpResponseMessage = await client.SendAsync(request);
-            // res = await PostProcess<TResponse>(httpResponseMessage, requestMessage.RequestUri, clientName);
-        }
-        catch (Exception ex)
-        {
-            //Logger.Error("Error response for url: {@requestUri}. Reason:{message}. Request:{@requestJson}."),
-            //requestMessage.RequestUri, ex.Message, JsonConvert.SerializeObject(requestMessage)));
-        }
+        var client = _clientFactory.CreateClient(clientName);
+        var request = PreProcess(requestMessage, body, settings);
+        var httpResponseMessage = await client.SendAsync(request);
+        httpResponseMessage.EnsureSuccessStatusCode();
+        return await PostProcess<TResponse>(httpResponseMessage, settings);
+    }
 
-        return res;
+    private async Task<TResponse> PostProcess<TResponse>(HttpResponseMessage httpResponseMessage, JsonSerializerSettings settings) where TResponse : class
+    {
+        var content = await httpResponseMessage.Content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject<TResponse>(content, settings);
     }
 
 
-    private HttpRequestMessage PreProcess<TRequest>(HttpRequestMessage requestMessage, TRequest body, string clientName)
+    private HttpRequestMessage PreProcess<TRequest>(HttpRequestMessage requestMessage, TRequest body, JsonSerializerSettings settings)
         where TRequest : class
     {
-        // var clientNameValue = isClientNameHasValue(clientName);
-        // var shouldLogRequest = false;
-        // _clientConfig[clientName]?.HttpLoggingOptions?.TryGetValue("Request", out shouldLogRequest);
-        // if(isClientNameHasValue( && !_clients[clientName].HttpLoggingOptions.IsNullOrEmpty() && shouldLogRequest)
-        // {
-        //     Logger.Info(Request body: {@body}, JsonConvert.SerializeObject(body));
-        // }
-        // else{
         requestMessage.Content = body != null ? new StringContent(JsonConvert.SerializeObject(body)) : null;
-        // }
         return requestMessage;
     }
 }

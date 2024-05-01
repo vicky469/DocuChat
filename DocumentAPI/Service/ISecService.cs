@@ -1,7 +1,6 @@
-using DocumentAPI.Models;
-using DocumentAPI.Models.SEC;
+using DocumentAPI.DTO.SEC;
 
-namespace DocumentAPI.Services;
+namespace DocumentAPI.Service;
 
 public interface ISecService
 {

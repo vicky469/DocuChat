@@ -4,14 +4,14 @@ namespace DocumentAPI.Common.HttpClientFactory.Impl;
 
 public class HttpClientWrapper : HttpClientBase, IHttpClientWrapper
 {
-    private readonly IWebClientConfig _clients;
+    private readonly IWebClientConfig _clientsConfig;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public HttpClientWrapper(IHttpContextAccessor httpContextAccessor, IWebClientConfig clients,
-        IHttpClientFactory clientFactory) : base(clientFactory, clients)
+    public HttpClientWrapper(IHttpContextAccessor httpContextAccessor, IWebClientConfig clientsConfig,
+        IHttpClientFactory clientFactory) : base(clientFactory, clientsConfig)
     {
         _httpContextAccessor = httpContextAccessor;
-        _clients = clients;
+        _clientsConfig = clientsConfig;
     }
 
     public async Task<TResponse> MakeRequestAsync<TRequest, TResponse>(HttpRequestMessage requestMessage,
@@ -19,18 +19,6 @@ public class HttpClientWrapper : HttpClientBase, IHttpClientWrapper
         where TRequest : class
         where TResponse : class
     {
-        //HttpUtil.GetOrSetCorrelationIDToRequest(_httpContextAccessor,requestMessage);
-        requestMessage = await GetAndAddAuthValToRequestMessageHeader(requestMessage, clientName);
-        var res = await SendAsync<TRequest, TResponse>(requestMessage, clientName, body);
-        if (res.Exception != null) return default;
-
-        return res.Response;
-    }
-
-
-    private async Task<HttpRequestMessage> GetAndAddAuthValToRequestMessageHeader(HttpRequestMessage requestMessage,
-        string clientName)
-    {
-        throw new NotImplementedException();
+        return await SendAsync<TRequest, TResponse>(requestMessage, clientName, body);
     }
 }
