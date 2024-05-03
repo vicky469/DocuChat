@@ -18,6 +18,7 @@
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
         <PackageReference Include="Polly" Version="8.3.1" />
         <PackageReference Include="Polly.Extensions.Http" Version="3.0.0" />
+        <PackageReference Include="pythonnet" Version="3.1.0-preview2024-04-07" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0"/>
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.5.0" />
         <PackageReference Include="Unchase.Swashbuckle.AspNetCore.Extensions" Version="2.7.1" />
@@ -40,6 +41,9 @@
 
     <ItemGroup>
       <Folder Include="Data\Batch Urls\" />
+      <Folder Include="Data\Failed\" />
+      <Folder Include="Data\Result\" />
+      <Folder Include="notebook\" />
     </ItemGroup>
 
 </Project>

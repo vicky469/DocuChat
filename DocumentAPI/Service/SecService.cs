@@ -188,18 +188,26 @@ public class SecService : ISecService
     {
         var divIndex = 0;
         for (var i = 0; i < divNodes.Count; i++)
-            if (divNodes[i].InnerHtml.Contains("INDEX") || divNodes[i].InnerHtml.Contains("TABLE OF CONTENTS"))
+        {
+            if(IndexKeywords.Any(keyword => divNodes[i].InnerHtml.IndexOf(keyword) >= 0))
             {
                 divIndex = i + 1; // XPath is 1-indexed 
                 while (divIndex < divNodes.Count && string.IsNullOrWhiteSpace(divNodes[divIndex].InnerText)) divIndex++;
                 break;
             }
+        }
 
         HtmlNode table = null;
+        string tableXPath = null;
         if (divIndex > 0)
         {
-            var tableXPath = $"//html/body/div[{divIndex + 1}]/table";
+            tableXPath = $"//html/body/div[{divIndex + 1}]/table";
             table = htmlDoc.DocumentNode.SelectSingleNode(tableXPath);
+            if (table == null)
+            {
+                tableXPath = $"//html/body/div[{divIndex + 1}]/div/table";
+                table = htmlDoc.DocumentNode.SelectSingleNode(tableXPath);
+            }
         }
 
         return table;
@@ -229,7 +237,7 @@ public class SecService : ISecService
                         var index = Array.IndexOf(hrefs, rowData.ItemHref);
                         string nextHref = null;
                         if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
-                        var content = GetContentBetweenIds(htmlDoc, rowData.ItemHref, nextHref);
+                        var content = GetHtmlSectionById(htmlDoc, rowData.ItemHref, nextHref);
                         if (!string.IsNullOrEmpty(content)) rowData.ItemValue = content;
                     }
 
@@ -273,8 +281,7 @@ public class SecService : ISecService
         await File.WriteAllTextAsync(filePath, jsonData);
     }
 
-
-    private static string GetContentBetweenIds(HtmlDocument htmlDoc, string startId, string endId)
+    private string GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
     {
         // Remove the '#' from the start of the ids if it's there
         if (startId.StartsWith("#")) startId = startId.Substring(1);
@@ -285,22 +292,53 @@ public class SecService : ISecService
         var xPathEnd = $"//*[@id='{endId}']";
         var startNode = htmlDoc.DocumentNode.SelectSingleNode(xPathStart);
         var endNode = htmlDoc.DocumentNode.SelectSingleNode(xPathEnd);
-
-        while (startNode != null && string.IsNullOrWhiteSpace(startNode.InnerText))
-            startNode = startNode.SelectSingleNode("following-sibling::div[not(@id)]");
-        while (endNode != null && string.IsNullOrWhiteSpace(endNode.InnerText))
-            endNode = endNode.SelectSingleNode("following-sibling::div[not(@id)]");
-        if (startNode == null || endNode == null) return string.Empty;
-        var content = new StringBuilder();
         var currentNode = startNode;
+        var data = new StringBuilder();
+        // Loop through the siblings of the start node until we reach the end node
         while (currentNode != endNode)
         {
-            content.AppendLine(currentNode.InnerHtml);
-            currentNode = currentNode.NextSibling;
             if (currentNode == null) break;
+            if (currentNode?.Name == "#text" || !string.IsNullOrEmpty(currentNode?.InnerText.Trim()))
+            {
+                // This is a text node
+                data.AppendLine(currentNode.InnerText.Trim());
+            }
+            else if (currentNode?.Name == "table")
+            {
+                // This is a table node
+                var rows = currentNode.SelectNodes(".//tr");
+                foreach (var row in rows)
+                {
+                    var cells = row.SelectNodes(".//td");
+                    var rowData = new List<string>();
+                    foreach (var cell in cells)
+                    {
+                        rowData.Add(cell.InnerText.Trim());
+                    }
+                    data.AppendLine(string.Join(" ", rowData));
+                }
+            }
+
+            currentNode = GetNextNode(currentNode);
         }
 
-        return content.ToString();
+        return data.ToString();
+    }
+    private static HtmlNode GetNextNode(HtmlNode currentNode)
+    {
+        // If there is no next sibling, go up the tree until we find a node with a next sibling
+        while (currentNode != null && currentNode.NextSibling == null)
+        {
+            currentNode = currentNode.ParentNode;
+        }
+
+        // Move to the next sibling
+        if (currentNode != null)
+        {
+            currentNode = currentNode.NextSibling;
+        }
+
+        return currentNode;
     }
 
     private static string[] GetAllHrefs(HtmlDocument htmlDoc)
@@ -330,13 +368,13 @@ public class SecService : ISecService
             Sec10KFormSectionEnum.Item1A, // Risk Factors
             Sec10KFormSectionEnum.Item2, // Properties
             Sec10KFormSectionEnum.Item3, // Legal Proceedings
-            Sec10KFormSectionEnum
-                .Item7, // Management’s Discussion and Analysis of Financial Condition and Results of Operations
+            Sec10KFormSectionEnum.Item7, // Management’s Discussion and Analysis of Financial Condition and Results of Operations
             Sec10KFormSectionEnum.Item7A, // Quantitative and Qualitative Disclosures about Market Risk
             Sec10KFormSectionEnum.Item9A // Controls and Procedures
         };
 
         foreach (var document in data)
+        {
             try
             {
                 document.Items = document.Items
@@ -344,6 +382,7 @@ public class SecService : ISecService
                         item.ItemNameEnum.HasValue && itemsToInclude.Contains((Sec10KFormSectionEnum)item.ItemNameEnum))
                     .ToList();
 
+                #if DEBUG
                 // audit the items to ensure all required items are present
                 var itemNames = document.Items.Where(item => item.ItemNameEnum.HasValue)
                     .Select(item => item.ItemNameEnum.Value)
@@ -353,6 +392,7 @@ public class SecService : ISecService
                 if (missingItems.Any())
                     throw new Exception(
                         $"url {document.SecDocumentUrl} is missing item: {string.Join(", ", missingItems)}");
+                #endif
             }
             catch (Exception e)
             {
@@ -364,6 +404,8 @@ public class SecService : ISecService
 
                 throw;
             }
+        }
+            
 
         return data;
     }
