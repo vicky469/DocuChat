@@ -31,7 +31,7 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
    - HtmlAgilityPack library to parse the HTML documents
    - Carter library for routing and handling requests, so I don't need to write my own filters from scratch and can have more time to focus on the business.
    - Polly library that provides resilience strategies in fluent-to-express policies such as Retry, WaitAndRetry, and CircuitBreaker, etc.
-   - Serilog library for logging. (future)
+   - ...
 
 
 ### References
