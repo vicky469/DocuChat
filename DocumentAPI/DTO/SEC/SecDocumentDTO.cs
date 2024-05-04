@@ -22,6 +22,7 @@ public class SecDocumentsParserRequest
 public class SecDocumentsParserResponse
 {
     public string SecDocumentType { get; set; }
+    public int RequestedUrls { get; set; }
     public int TotalItems { get; set; }
     public List<SecDocumentData> Data { get; set; }
     public int CountTotalItems()
@@ -44,5 +45,5 @@ public class Sec10KIndexDTO
     [JsonIgnore]
     public Sec10KFormSectionEnum? ItemNameEnum { get; set; }
     public string ItemHref { get; set; }
-    public string ItemValue { get; set; }
+    public Dictionary<string,string> ItemValue { get; set; }
 }

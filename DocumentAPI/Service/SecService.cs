@@ -1,4 +1,3 @@
-using System.Text;
 using AutoMapper;
 using DocumentAPI.Common;
 using DocumentAPI.Common.Extensions;
@@ -14,8 +13,9 @@ using JsonSerializer = System.Text.Json.JsonSerializer;
 namespace DocumentAPI.Service;
 
 public class SecService : ISecService
-{
-    private static readonly List<string> IndexKeywords = new()
+{ 
+    private static List<Sec10KFormSectionEnum> ItemsToInclude;
+    private static readonly HashSet<string> IndexKeywords = new()
     {
         "INDEX",
         "TABLE OF CONTENTS"
@@ -32,6 +32,24 @@ public class SecService : ISecService
         _httpContextAccessor = httpContextAccessor;
         _fileRepository = fileRepository;
         _mapper = mapper;
+        var callingApp = GetCallingApp();
+        if (string.Equals(callingApp, CallingAppEnum.CompanyA.GetDescription(), StringComparison.OrdinalIgnoreCase))
+        {
+            ItemsToInclude = new List<Sec10KFormSectionEnum>
+            {
+                Sec10KFormSectionEnum.Item1, // Business
+                Sec10KFormSectionEnum.Item1A, // Risk Factors
+                Sec10KFormSectionEnum.Item2, // Properties
+                Sec10KFormSectionEnum.Item3, // Legal Proceedings
+                Sec10KFormSectionEnum.Item7, // Management’s Discussion and Analysis of Financial Condition and Results of Operations
+                Sec10KFormSectionEnum.Item7A, // Quantitative and Qualitative Disclosures about Market Risk
+                Sec10KFormSectionEnum.Item9A // Controls and Procedures
+            };
+        }
+        else
+        {
+            ItemsToInclude = new List<Sec10KFormSectionEnum>(Enum.GetValues(typeof(Sec10KFormSectionEnum)).Cast<Sec10KFormSectionEnum>());
+        }
     }
 
     public async Task<IResult> ParseDocuments(SecDocumentsParserRequest request)
@@ -39,6 +57,7 @@ public class SecService : ISecService
         var response = new SecDocumentsParserResponse
         {
             SecDocumentType = request.SecDocumentTypeEnum.GetDescription(),
+            RequestedUrls = request.SecDocumentUrls.Length,
             Data = new List<SecDocumentData>()
         };
         var urlChunks = Utils.SplitIntoChunks(request.SecDocumentUrls);
@@ -53,9 +72,8 @@ public class SecService : ISecService
             var results = await Task.WhenAll(tasks);
             response.Data.AddRange(results);
         }
-
-        // Filter the response based on the callingApp
-        response.Data = await FilterResponse(response.Data);
+        
+        await AuditResult(response.Data);
         response.TotalItems = response.CountTotalItems();
         response.Data.ForEach(d => d.ItemsCnt = d.Items.Count);
         return Results.Ok(response);
@@ -90,15 +108,6 @@ public class SecService : ISecService
     }
 
     #region private methods
-    private async Task<List<SecDocumentData>> FilterResponse(List<SecDocumentData> data)
-    {
-        var callingApp = GetCallingApp();
-        if (callingApp == null) return data;
-
-        if (string.Equals(callingApp, CallingAppEnum.CompanyA.GetDescription(), StringComparison.OrdinalIgnoreCase))
-            data = await FilterForCompanyA(data);
-        return data;
-    }
 
     private string? GetCallingApp() => _httpContextAccessor?.HttpContext?.Request?.Headers[Constants.XCallingApp].ToString();
 
@@ -147,39 +156,32 @@ public class SecService : ISecService
 
     private async Task<SecDocumentData> ProcessUrl(SecDocumentData data)
     {
-        try
+        var htmlDoc = await GetHtmlDoc(data.SecDocumentUrl);
+        var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
+        if (divNodes == null)
         {
-            var htmlDoc = await GetHtmlDoc(data.SecDocumentUrl);
-            var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
-            if (divNodes == null)
-            {
-                Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No div nodes found.");
-                return data;
-            }
-
-            var table = GetHtmlTable(divNodes, htmlDoc);
-            if (table == null)
-            {
-                Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No div nodes found.");
-                return data;
-            }
-
-            var hrefs = GetAllHrefs(htmlDoc);
-            var rows = table.SelectNodes(".//tr");
-            if (rows == null)
-            {
-                Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
-                return data;
-            }
-
-            data.Items = GetItemsFromRows(rows, hrefs, htmlDoc);
-            if (data.Items.Count == 0) Console.WriteLine($"Failed to URL: {data.SecDocumentUrl}. No items found.");
-            await SaveJsonToFile(data.Items, data.SecDocumentUrl);
+            Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No div nodes found.");
+            return data;
         }
-        catch (Exception ex)
+
+        var table = GetHtmlTable(divNodes, htmlDoc);
+        if (table == null)
         {
-            Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. Error: {ex.Message}");
+            Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No div nodes found.");
+            return data;
         }
+
+        var hrefs = GetAllHrefs(htmlDoc);
+        var rows = table.SelectNodes(".//tr");
+        if (rows == null)
+        {
+            Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
+            return data;
+        }
+
+        data.Items = ParseRows(rows, hrefs, htmlDoc);
+        if (data.Items?.Count == 0) Console.WriteLine($"Failed to URL: {data.SecDocumentUrl}. No items found.");
+        await SaveResultToFile(data.Items, data.SecDocumentUrl);
 
         return data;
     }
@@ -213,7 +215,7 @@ public class SecService : ISecService
         return table;
     }
 
-    private List<Sec10KIndexDTO> GetItemsFromRows(HtmlNodeCollection rows, string[] hrefs, HtmlDocument htmlDoc)
+    private List<Sec10KIndexDTO> ParseRows(HtmlNodeCollection rows, string[] hrefs, HtmlDocument htmlDoc)
     {
         var items = new List<Sec10KIndexDTO>();
 
@@ -222,26 +224,33 @@ public class SecService : ISecService
             var cols = row.SelectNodes(".//td");
             if (cols != null)
             {
-                var rowData = new Sec10KIndexDTO();
+                var sectionData = new Sec10KIndexDTO();
                 var cellValues = cols.Select(cell => cell.InnerText.Trim()).ToList();
                 var containsItem = cellValues.Any(value => value.Contains("Item"));
                 if (containsItem)
                 {
-                    rowData.Item = cols[0].InnerText;
-                    rowData.ItemName = cols[1].InnerText;
-                    rowData.ItemNameEnum = EnumEx.TryGetEnumFromDescription<Sec10KFormSectionEnum>(rowData.ItemName);
+                    sectionData.Item = cols[0].InnerText.Replace(".","");
+                    sectionData.ItemName = HtmlEntity.DeEntitize(cols[1].InnerText.Trim());
+                    sectionData.ItemNameEnum = EnumEx.TryGetEnumFromDescription<Sec10KFormSectionEnum>(sectionData.ItemName);
+                    if (sectionData.ItemNameEnum==null)
+                    {
+                        Console.WriteLine("Failed to parse item name.");
+                    }
+                    var skipParse = ItemsToInclude.Any(item => item == sectionData?.ItemNameEnum);
+                    if(!skipParse) continue;
+                    
                     var nestedLinkNode = cols[1].SelectSingleNode(".//a");
                     if (nestedLinkNode != null)
                     {
-                        rowData.ItemHref = nestedLinkNode.GetAttributeValue("href", string.Empty);
-                        var index = Array.IndexOf(hrefs, rowData.ItemHref);
+                        sectionData.ItemHref = nestedLinkNode.GetAttributeValue("href", string.Empty);
+                        var index = Array.IndexOf(hrefs, sectionData.ItemHref);
                         string nextHref = null;
                         if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
-                        var content = GetHtmlSectionById(htmlDoc, rowData.ItemHref, nextHref);
-                        if (!string.IsNullOrEmpty(content)) rowData.ItemValue = content;
+                        var sections = GetHtmlSectionById(htmlDoc, sectionData.ItemHref, nextHref);
+                        if (sections?.Count > 0) sectionData.ItemValue = sections;
                     }
 
-                    if (rowData.Item != null && rowData.ItemName != null) items.Add(rowData);
+                    items.Add(sectionData);
                 }
             }
         }
@@ -271,7 +280,7 @@ public class SecService : ISecService
         return htmlDoc;
     }
 
-    private static async Task SaveJsonToFile(List<Sec10KIndexDTO> indexDTO, string url)
+    private static async Task SaveResultToFile(List<Sec10KIndexDTO> indexDTO, string url)
     {
         var fileName = Path.GetFileName(url);
         var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Result");
@@ -281,8 +290,10 @@ public class SecService : ISecService
         await File.WriteAllTextAsync(filePath, jsonData);
     }
 
-    private string GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
+    private Dictionary<string, string> GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
     {
+        var sections = new Dictionary<string, string>();
+        
         // Remove the '#' from the start of the ids if it's there
         if (startId.StartsWith("#")) startId = startId.Substring(1);
         if (endId.StartsWith("#")) endId = endId.Substring(1);
@@ -293,15 +304,35 @@ public class SecService : ISecService
         var startNode = htmlDoc.DocumentNode.SelectSingleNode(xPathStart);
         var endNode = htmlDoc.DocumentNode.SelectSingleNode(xPathEnd);
         var currentNode = startNode;
-        var data = new StringBuilder();
         // Loop through the siblings of the start node until we reach the end node
+        var dicKey = string.Empty;
         while (currentNode != endNode)
         {
-            if (currentNode == null) break;
-            if (currentNode?.Name == "#text" || !string.IsNullOrEmpty(currentNode?.InnerText.Trim()))
+            var dicValue = string.Empty;
+            if (currentNode == null || currentNode.InnerHtml.Contains(endId)) break;
+            if (currentNode?.Name == "#text" || !string.IsNullOrEmpty(currentNode?.InnerText))
             {
                 // This is a text node
-                data.AppendLine(currentNode.InnerText.Trim());
+                var cleanedText = HtmlEntity.DeEntitize(currentNode.InnerText.Trim());
+                var isSubSection = currentNode.InnerHtml.Contains("font-weight:bold") || currentNode.InnerHtml.Contains("text-decoration:underline");
+                if (isSubSection)
+                {
+                    dicKey = cleanedText;
+                }
+                else
+                {
+                    dicValue = cleanedText;
+                }
+
+                // update dictionary by append value to existing key
+                if (sections.ContainsKey(dicKey) && !string.IsNullOrEmpty(dicValue))
+                {
+                    sections[dicKey] += cleanedText;
+                }
+                else // create new key value pair
+                {
+                    sections[dicKey] = dicValue;
+                }
             }
             else if (currentNode?.Name == "table")
             {
@@ -310,20 +341,21 @@ public class SecService : ISecService
                 foreach (var row in rows)
                 {
                     var cells = row.SelectNodes(".//td");
-                    var rowData = new List<string>();
-                    foreach (var cell in cells)
-                    {
-                        rowData.Add(cell.InnerText.Trim());
-                    }
-                    data.AppendLine(string.Join(" ", rowData));
+                    // var rowData = new List<string>();
+                    // foreach (var cell in cells)
+                    // {
+                    //     var cleanedText = HtmlEntity.DeEntitize(cell.InnerText.Trim());
+                    //     rowData.Add(cleanedText);
+                    // }
+                    //data.AppendLine(string.Join(" ", rowData));
                 }
             }
-
+            
             currentNode = GetNextNode(currentNode);
         }
-
-        return data.ToString();
+        return sections;
     }
+
     private static HtmlNode GetNextNode(HtmlNode currentNode)
     {
         // If there is no next sibling, go up the tree until we find a node with a next sibling
@@ -334,6 +366,14 @@ public class SecService : ISecService
 
         // Move to the next sibling
         if (currentNode != null)
+        {
+            currentNode = currentNode.NextSibling;
+        }
+        
+        // Skip div elements with style="page-break-after:always"
+        while (currentNode != null &&
+               (currentNode.Attributes["style"]?.Value.Contains("page-break-after:always") == true
+               || currentNode.Name == "div" && currentNode.InnerText.Contains("Table of Contents")))
         {
             currentNode = currentNode.NextSibling;
         }
@@ -360,28 +400,12 @@ public class SecService : ISecService
         return hrefs;
     }
 
-    private async Task<List<SecDocumentData>> FilterForCompanyA(List<SecDocumentData> data)
+    private async Task AuditResult(List<SecDocumentData> data)
     {
-        var itemsToInclude = new List<Sec10KFormSectionEnum>
-        {
-            Sec10KFormSectionEnum.Item1, // Business
-            Sec10KFormSectionEnum.Item1A, // Risk Factors
-            Sec10KFormSectionEnum.Item2, // Properties
-            Sec10KFormSectionEnum.Item3, // Legal Proceedings
-            Sec10KFormSectionEnum.Item7, // Management’s Discussion and Analysis of Financial Condition and Results of Operations
-            Sec10KFormSectionEnum.Item7A, // Quantitative and Qualitative Disclosures about Market Risk
-            Sec10KFormSectionEnum.Item9A // Controls and Procedures
-        };
-
         foreach (var document in data)
         {
             try
             {
-                document.Items = document.Items
-                    .Where(item =>
-                        item.ItemNameEnum.HasValue && itemsToInclude.Contains((Sec10KFormSectionEnum)item.ItemNameEnum))
-                    .ToList();
-
                 #if DEBUG
                 // audit the items to ensure all required items are present
                 var itemNames = document.Items.Where(item => item.ItemNameEnum.HasValue)
@@ -405,9 +429,7 @@ public class SecService : ISecService
                 throw;
             }
         }
-            
-
-        return data;
     }
+    
     #endregion
 }

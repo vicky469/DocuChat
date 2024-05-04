@@ -21,13 +21,9 @@ public static class EnumEx
 {
     var enumType = typeof(TEnum);
     if (!enumType.IsEnum) return null;
-
+    var potentialMatches = new List<(TEnum, double)>();
     // Split the description into words
     var descriptionWords = Regex.Split(description, @"[\s.,;&'-]+").Where(x => !string.IsNullOrEmpty(x)).ToArray();
-
-    // Store potential matches in a list
-    var potentialMatches = new List<(TEnum, double)>();
-
     foreach (var name in Enum.GetNames(enumType))
     {
         var enumMemberAttribute = ((DescriptionAttribute[])enumType.GetField(name).GetCustomAttributes(typeof(DescriptionAttribute), false)).SingleOrDefault();
@@ -35,24 +31,20 @@ public static class EnumEx
         {
             // Split the enum description into words
             var enumDescriptionWords = Regex.Split(enumMemberAttribute.Description, @"[\s.,;&'-]+").Where(x => !string.IsNullOrEmpty(x)).ToArray();
+            
+            // Find the common words between the input description and the enum description
+            var commonWords = descriptionWords.Intersect(enumDescriptionWords).ToArray();
+            var commonDescription = string.Join(" ", commonWords);
 
-            // Compare the first word for an exact match
-            if (descriptionWords[0].Equals(enumDescriptionWords[0], StringComparison.OrdinalIgnoreCase))
-            {
-                // Compare the rest of the description for a fuzzy match
-                var cleanedDescription = CleanDescription(string.Join(" ", descriptionWords.Skip(1)));
-                var cleanedEnumDescription = CleanDescription(string.Join(" ", enumDescriptionWords.Skip(1)));
+            // Clean and normalize the common description
+            var cleanedCommonDescription = CleanDescription(commonDescription);
+            cleanedCommonDescription = NormalizeDescription(cleanedCommonDescription);
+            
+            var similarity = CalculateSimilarity(cleanedCommonDescription, enumMemberAttribute.Description.ToLower());
+            if(similarity == 1) return (TEnum)Enum.Parse(enumType, name);
 
-                // Normalize abbreviations
-                cleanedDescription = NormalizeDescription(cleanedDescription);
-                cleanedEnumDescription = NormalizeDescription(cleanedEnumDescription);
-
-                var similarity = CalculateSimilarity(cleanedDescription, cleanedEnumDescription);
-                if(similarity == 1) return (TEnum)Enum.Parse(enumType, name);
-
-                // Add the enum value and its similarity score to the list of potential matches
-                potentialMatches.Add(((TEnum)Enum.Parse(enumType, name), similarity));
-            }
+            // Add the enum value and its similarity score to the list of potential matches
+            potentialMatches.Add(((TEnum)Enum.Parse(enumType, name), similarity));
         }
     }
 
@@ -60,7 +52,7 @@ public static class EnumEx
     if (potentialMatches.Count > 0)
     {
         var bestMatch = potentialMatches.OrderByDescending(match => match.Item2).First();
-        return bestMatch.Item1;
+        if(bestMatch.Item2 > 0.7) return bestMatch.Item1;
     }
 
     return null;
