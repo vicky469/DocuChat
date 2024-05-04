@@ -25,14 +25,11 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
    - Extract the specific sections from the forms.
    - Do a load testing, say 200 documents.
 ### Code
-1. Create a new project using the .NET 8 Minimal API template.
-2. Used HTTP client factory to make the HTTP request. [1]
-3. Libraries
+1. Algorithms
+   - Levenshtein Distance for Measuring Text Similarity
+2. Libraries
    - HtmlAgilityPack library to parse the HTML documents
    - Carter library for routing and handling requests, so I don't need to write my own filters from scratch and can have more time to focus on the business.
    - Polly library that provides resilience strategies in fluent-to-express policies such as Retry, WaitAndRetry, and CircuitBreaker, etc.
    - ...
 
-
-### References
-[1] https://learn.microsoft.com/en-us/dotnet/architecture/microservices/implement-resilient-applications/use-httpclientfactory-to-implement-resilient-http-requests
