@@ -8,6 +8,7 @@ public class SecDocumentsParserRequest
 {
     public SecFormTypeEnum SecDocumentTypeEnum { get; set; }
     public string[] SecDocumentUrls { get; set; }
+    public HashSet<string> TargetItemsInDocument { get; set; }
     
     
     public class SecDocumentsParserRequestValidator : AbstractValidator<SecDocumentsParserRequest>
@@ -46,6 +47,8 @@ public class SecDocumentData
 {
     public string SecDocumentUrl { get; set; }
     public int ItemsCnt { get; set; }
+    [JsonIgnore]
+    public HashSet<string> TargetItemsInDocument { get; set; }
     public List<Sec10KIndexDTO> Items { get; set; }
 }
 
@@ -56,5 +59,5 @@ public class Sec10KIndexDTO
     [JsonIgnore]
     public Sec10KFormSectionEnum? ItemNameEnum { get; set; }
     public string ItemHref { get; set; }
-    public ConcurrentDictionary<string,string> ItemValue { get; set; }
+    public Dictionary<string,string> ItemValue { get; set; }
 }

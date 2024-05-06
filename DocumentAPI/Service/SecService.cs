@@ -18,12 +18,12 @@ namespace DocumentAPI.Service;
 
 public class SecService : ISecService
 { 
-    private static List<string> ItemsToInclude;
-    private static readonly HashSet<string> IndexKeywords = new()
-    {
+    private static HashSet<string> ItemsToInclude;
+    private static readonly HashSet<string> IndexKeywords =
+    [
         "INDEX",
         "TABLE OF CONTENTS"
-    };
+    ];
 
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ISecClientService _secClient;
@@ -39,20 +39,20 @@ public class SecService : ISecService
         var callingApp = GetCallingApp();
         if (string.Equals(callingApp, CallingAppEnum.CompanyA.GetDescription(), StringComparison.OrdinalIgnoreCase))
         {
-            ItemsToInclude = new List<string>
-            {
-                "Item1.", // Business
-                "Item1A.", // Risk Factors
-                "Item2.", // Properties
-                "Item3.", // Legal Proceedings
-                "Item7.", // Management’s Discussion and Analysis of Financial Condition and Results of Operations
-                "Item7A.", // Quantitative and Qualitative Disclosures about Market Risk
-                "Item9A." // Controls and Procedures
-            };
+            ItemsToInclude =
+            [
+                "Item1", // Business
+                "Item1A", // Risk Factors
+                "Item2", // Properties
+                "Item3", // Legal Proceedings
+                "Item7", // Management’s Discussion and Analysis of Financial Condition and Results of Operations
+                "Item7A", // Quantitative and Qualitative Disclosures about Market Risk
+                "Item9A"
+            ];
         }
         else
         {
-            ItemsToInclude = new List<string>(Enum.GetValues(typeof(Sec10KFormSectionEnum))
+            ItemsToInclude = new HashSet<string>(Enum.GetValues(typeof(Sec10KFormSectionEnum))
                 .Cast<Sec10KFormSectionEnum>()
                 .Select(item => item.ToString() + "."));
         }
@@ -64,21 +64,20 @@ public class SecService : ISecService
         {
             SecDocumentType = request.SecDocumentTypeEnum.GetDescription(),
             RequestedUrls = request.SecDocumentUrls.Length,
-            Sections = new List<SecDocumentData>()
+            Sections = []
         };
         var urlChunks = Utils.SplitIntoChunks(request.SecDocumentUrls);
         for (var i = 0; i < urlChunks.Count; i++)
         {
             var tasks = urlChunks[i].Select(url =>
             {
-                var data = new SecDocumentData { SecDocumentUrl = url };
+                var targetItems = (request.TargetItemsInDocument?.Any() == true ? request.TargetItemsInDocument : ItemsToInclude);
+                var data = new SecDocumentData { SecDocumentUrl = url , TargetItemsInDocument = targetItems};
                 return ParseUrlAsync(data);
             });
             var results = await Task.WhenAll(tasks);
             response.Sections.AddRange(results);
         }
-
-        //await AuditResult(response.Sections);
         response.TotalItems = response.CountTotalItems();
         response.CountTotalItemsPerSection();
         return Results.Ok(response);
@@ -96,8 +95,7 @@ public class SecService : ISecService
             var hrefs = GetAllHrefs(table);
             var rows = table.SelectNodes(".//tr");
             if (rows == null)throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
-            //data.Items = ParseRows(rows, hrefs, htmlDoc);
-            data.Items = ParseRowsParallelForEach(rows, hrefs, htmlDoc);
+            data.Items = ParseRowsParallel(rows, hrefs, htmlDoc,data.TargetItemsInDocument);
             if (data.Items == null || data.Items.Count == 0) throw new Exception($"Failed to URL: {data.SecDocumentUrl}. No items found.");
 
             await SaveResultToFile(data.Items, data.SecDocumentUrl);
@@ -276,7 +274,7 @@ public class SecService : ISecService
         return tableNode;
     }
     
-    private List<Sec10KIndexDTO> ParseRowsParallelForEach(HtmlNodeCollection rows, string[] hrefs, HtmlDocument htmlDoc)
+    private List<Sec10KIndexDTO> ParseRowsParallel(HtmlNodeCollection rows, string[] hrefs, HtmlDocument htmlDoc, HashSet<string> targetItemsInDocument)
     {
         Console.WriteLine($"Parsing {rows.Count} rows.");
         var items = new ConcurrentBag<Sec10KIndexDTO>();
@@ -300,7 +298,7 @@ public class SecService : ISecService
                     sectionData.ItemName = cellValues[1];
                     sectionData.ItemNameEnum = EnumEx.TryGetEnumFromDescription<Sec10KFormSectionEnum>(sectionData.ItemName);
                     if (sectionData.ItemNameEnum == null)Console.WriteLine("Failed to parse item name.");
-                    if (ItemsToInclude.Any(item => item.Equals(sectionData.Item.Replace(" ", ""), StringComparison.OrdinalIgnoreCase)))
+                    if (targetItemsInDocument.Any(item => item.Equals(sectionData.Item.Replace(" ", "").TrimEnd('.'), StringComparison.OrdinalIgnoreCase)))
                     {
                         var itemNameNode = cols.FirstOrDefault(cell =>
                         {
@@ -376,7 +374,7 @@ public class SecService : ISecService
         await File.WriteAllTextAsync(filePath, jsonData);
     }
 
-    private ConcurrentDictionary<string, string> GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
+    private Dictionary<string, string> GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
     {
         var sections = new ConcurrentDictionary<string, StringBuilder>();
 
@@ -385,18 +383,55 @@ public class SecService : ISecService
         var xPathEnd = $"//*[@id='{endId}']";
         var startNode = htmlDoc.DocumentNode.SelectSingleNode(xPathStart);
         var endNode = htmlDoc.DocumentNode.SelectSingleNode(xPathEnd);
+
         var currentNode = startNode;
-        // Loop through the siblings of the start node until we reach the end node
         var dicKey = string.Empty;
+        
+        // Loop through the siblings of the start node until we reach the end node
         while (currentNode != endNode)
         {
             if (currentNode == null || currentNode.InnerHtml.Contains(endId)) break;
-            if (currentNode?.Name == "#text" || !string.IsNullOrEmpty(currentNode?.InnerText))
+            if (currentNode.InnerHtml.Contains("<table"))
             {
-                // This is a text node
+                // Parse table
+                var tableNode = currentNode.SelectSingleNode(".//table");
+                if (tableNode != null)
+                {
+                    var rows = currentNode.SelectNodes(".//tr");
+                    var keys = new List<string>();
+                    foreach (var row in rows)
+                    {
+                        var cells = row.SelectNodes(".//td")
+                            .Where(cell => !string.IsNullOrEmpty(HtmlEntity.DeEntitize(cell.InnerText.Trim())))
+                            .ToList();
+                        for (var i = 0; i < cells.Count; i++)
+                        {
+                            var cell = HtmlEntity.DeEntitize(cells[i].InnerText.Trim());
+                            if (keys.Count < cells.Count)
+                            {
+                                // create dictionary key
+                                keys.Add(cell);
+                                sections[cell] = new StringBuilder();
+                            }
+                            else if (sections.TryGetValue(keys[i], out var existingVal))
+                            {
+                                existingVal.Append(cell + ". ");
+                                sections[keys[i]] =existingVal;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Parse Text
                 var innerText = currentNode.InnerText;
                 var cleanedText = HtmlEntity.DeEntitize(innerText.Trim());
-                if (string.IsNullOrEmpty(cleanedText)) continue;
+                if (string.IsNullOrEmpty(cleanedText))
+                {
+                    currentNode = GetNextNode(currentNode);
+                    continue;
+                }
 
                 var fontWeight = 0;
                 var stylePattern = @"font-weight:\s*(\d+)";
@@ -427,31 +462,15 @@ public class SecService : ISecService
                     sections[dicKey] = dicValue;
                 }
             }
-            else if (currentNode?.Name == "table")
-            {
-                // This is a table node
-                var rows = currentNode.SelectNodes(".//tr");
-                foreach (var row in rows)
-                {
-                    var cells = row.SelectNodes(".//td");
-                    // var rowData = new List<string>();
-                    // foreach (var cell in cells)
-                    // {
-                    //     var cleanedText = HtmlEntity.DeEntitize(cell.InnerText.Trim());
-                    //     rowData.Add(cleanedText);
-                    // }
-                    //data.AppendLine(string.Join(" ", rowData));
-                }
-            }
-            
+           
             currentNode = GetNextNode(currentNode);
         }
         
-        return new ConcurrentDictionary<string, string>(
+        return new Dictionary<string, string>(
             sections.ToDictionary(pair => pair.Key, pair => pair.Value.ToString())
         );
     }
-
+    
     private static HtmlNode GetNextNode(HtmlNode currentNode)
     {
         // If there is no next sibling, go up the tree until we find a node with a next sibling
@@ -486,10 +505,9 @@ public class SecService : ISecService
 
         // Extract the 'href' attribute from each 'a' element
         var hrefs = linkNodes
+            .Where(node => !node.InnerText.Contains("Item"))
             .Select(node => node.GetAttributeValue("href", string.Empty))
             .Where(href => !string.IsNullOrEmpty(href))
-            .GroupBy(href => href)
-            .SelectMany(group => group.Count() > 1 ? group.Skip(1) : group)
             .Distinct()
             .ToArray();
 
