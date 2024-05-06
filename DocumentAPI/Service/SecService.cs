@@ -64,19 +64,18 @@ public class SecService : ISecService
             Sections = new List<SecDocumentData>()
         };
         var urlChunks = Utils.SplitIntoChunks(request.SecDocumentUrls);
-        foreach (var urlChunk in urlChunks)
+        for (var i = 0; i < urlChunks.Count; i++)
         {
-            var tasks = urlChunk.Select(url =>
+            var tasks = urlChunks[i].Select(url =>
             {
                 var data = new SecDocumentData { SecDocumentUrl = url };
                 return ParseUrlAsync(data);
             });
-
             var results = await Task.WhenAll(tasks);
             response.Sections.AddRange(results);
         }
-        
-        await AuditResult(response.Sections);
+
+        //await AuditResult(response.Sections);
         response.TotalItems = response.CountTotalItems();
         response.CountTotalItemsPerSection();
         return Results.Ok(response);
@@ -217,7 +216,7 @@ public class SecService : ISecService
         foreach (var keyword in IndexKeywords)
         {
             var keywordNode = htmlDoc.DocumentNode.SelectSingleNode($"//*[text()[contains(., '{keyword}')]]");
-
+        
             if (keywordNode != null)
             {
                 for (int i = 1; i <= 5; i++)
@@ -277,7 +276,7 @@ public class SecService : ISecService
                 var containsItem = cellValues.Any(value => value.Contains("Item"));
                 if (containsItem)
                 {
-                    sectionData.Item = cellValues[0].Replace(".","");
+                    sectionData.Item = cellValues[0];
                     sectionData.ItemName = cellValues[1];
                     sectionData.ItemNameEnum = EnumEx.TryGetEnumFromDescription<Sec10KFormSectionEnum>(sectionData.ItemName);
                     if (sectionData.ItemNameEnum==null)
@@ -287,7 +286,7 @@ public class SecService : ISecService
                     var skipParse = ItemsToInclude.Any(item => item == sectionData?.ItemNameEnum);
                     if(!skipParse) continue;
                     
-                    var itemNameNode = cols.FirstOrDefault(cell => HtmlEntity.DeEntitize(cell.InnerText.Trim()) == sectionData.ItemName);
+                    var itemNameNode = cols.FirstOrDefault(cell => HtmlEntity.DeEntitize(cell.InnerText.Trim()) == sectionData.Item);
                     if(itemNameNode==null)  Console.WriteLine($"Failed to get itemNameNode for {row}.");
                     var nestedLinkNode = itemNameNode.SelectSingleNode(".//a");
                     if (nestedLinkNode != null)
@@ -297,6 +296,9 @@ public class SecService : ISecService
                         if (index == -1) throw new Exception("Failed to find href in list of hrefs.");
                         string nextHref = null;
                         if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
+                        // Remove the '#' from the start of the ids if it's there
+                        if (sectionData.ItemHref.StartsWith("#")) sectionData.ItemHref = sectionData.ItemHref.Substring(1);
+                        if (nextHref.StartsWith("#")) nextHref = nextHref.Substring(1);
                         var sections = GetHtmlSectionById(htmlDoc, sectionData.ItemHref, nextHref);
                         if (sections?.Count > 0) sectionData.ItemValue = sections;
                     }
@@ -346,11 +348,7 @@ public class SecService : ISecService
 
     private Dictionary<string, string> GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
     {
-        var sections = new Dictionary<string, string>();
-        
-        // Remove the '#' from the start of the ids if it's there
-        if (startId.StartsWith("#")) startId = startId.Substring(1);
-        if (endId.StartsWith("#")) endId = endId.Substring(1);
+        var sections = new Dictionary<string, StringBuilder>();
 
         // Use XPath to find the elements with the specific ids
         var xPathStart = $"//*[@id='{startId}']";
@@ -382,11 +380,11 @@ public class SecService : ISecService
                 // update dictionary by append value to existing key
                 if (sections.ContainsKey(dicKey) && !string.IsNullOrEmpty(dicValue))
                 {
-                    sections[dicKey] += cleanedText;
+                    sections[dicKey].Append(cleanedText);
                 }
                 else // create new key value pair
                 {
-                    sections[dicKey] = dicValue;
+                    sections[dicKey] = new StringBuilder(cleanedText);
                 }
             }
             else if (currentNode?.Name == "table")
@@ -408,7 +406,7 @@ public class SecService : ISecService
             
             currentNode = GetNextNode(currentNode);
         }
-        return sections;
+        return sections.ToDictionary(pair => pair.Key, pair => pair.Value.ToString());
     }
 
     private static HtmlNode GetNextNode(HtmlNode currentNode)
@@ -439,7 +437,7 @@ public class SecService : ISecService
     private static string[] GetAllHrefs(HtmlNode tableNode)
     {
         // Use XPath to find all 'a' elements
-        var linkNodes = tableNode.SelectNodes("//a");
+        var linkNodes = tableNode.SelectNodes(".//a[@href]");
 
         if (linkNodes == null) return new string[0];
 
