@@ -97,7 +97,7 @@ public class SecService : ISecService
             if (rows == null)throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
             data.Items = ParseRowsParallel(rows, hrefs, htmlDoc,data.TargetItemsInDocument);
             if (data.Items == null || data.Items.Count == 0) throw new Exception($"Failed to URL: {data.SecDocumentUrl}. No items found.");
-
+            data.Items = data.Items.OrderBy(item => item.ItemNameEnum).ToList();
             await SaveResultToFile(data.Items, data.SecDocumentUrl);
         }
         catch (Exception e)
