@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
 using FluentValidation;
 
@@ -55,5 +56,5 @@ public class Sec10KIndexDTO
     [JsonIgnore]
     public Sec10KFormSectionEnum? ItemNameEnum { get; set; }
     public string ItemHref { get; set; }
-    public Dictionary<string,string> ItemValue { get; set; }
+    public ConcurrentDictionary<string,string> ItemValue { get; set; }
 }

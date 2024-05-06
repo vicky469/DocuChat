@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using AutoMapper;
@@ -17,7 +18,7 @@ namespace DocumentAPI.Service;
 
 public class SecService : ISecService
 { 
-    private static List<Sec10KFormSectionEnum> ItemsToInclude;
+    private static List<string> ItemsToInclude;
     private static readonly HashSet<string> IndexKeywords = new()
     {
         "INDEX",
@@ -38,20 +39,22 @@ public class SecService : ISecService
         var callingApp = GetCallingApp();
         if (string.Equals(callingApp, CallingAppEnum.CompanyA.GetDescription(), StringComparison.OrdinalIgnoreCase))
         {
-            ItemsToInclude = new List<Sec10KFormSectionEnum>
+            ItemsToInclude = new List<string>
             {
-                Sec10KFormSectionEnum.Item1, // Business
-                Sec10KFormSectionEnum.Item1A, // Risk Factors
-                Sec10KFormSectionEnum.Item2, // Properties
-                Sec10KFormSectionEnum.Item3, // Legal Proceedings
-                Sec10KFormSectionEnum.Item7, // Management’s Discussion and Analysis of Financial Condition and Results of Operations
-                Sec10KFormSectionEnum.Item7A, // Quantitative and Qualitative Disclosures about Market Risk
-                Sec10KFormSectionEnum.Item9A // Controls and Procedures
+                "Item1.", // Business
+                "Item1A.", // Risk Factors
+                "Item2.", // Properties
+                "Item3.", // Legal Proceedings
+                "Item7.", // Management’s Discussion and Analysis of Financial Condition and Results of Operations
+                "Item7A.", // Quantitative and Qualitative Disclosures about Market Risk
+                "Item9A." // Controls and Procedures
             };
         }
         else
         {
-            ItemsToInclude = new List<Sec10KFormSectionEnum>(Enum.GetValues(typeof(Sec10KFormSectionEnum)).Cast<Sec10KFormSectionEnum>());
+            ItemsToInclude = new List<string>(Enum.GetValues(typeof(Sec10KFormSectionEnum))
+                .Cast<Sec10KFormSectionEnum>()
+                .Select(item => item.ToString() + "."));
         }
     }
 
@@ -83,17 +86,32 @@ public class SecService : ISecService
     
     public async Task<SecDocumentData> ParseUrlAsync(SecDocumentData data)
     {
-        var htmlDoc = await GetHtmlDocAsync(data.SecDocumentUrl);
-        var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
-        var table = GetHtmlTable(divNodes, htmlDoc);
-        if (table == null) throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No table found.");
-        var hrefs = GetAllHrefs(table);
-        var rows = table.SelectNodes(".//tr");
-        if (rows == null)throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
-        data.Items = ParseRows(rows, hrefs, htmlDoc);
-        if (data.Items == null || data.Items.Count == 0) throw new Exception($"Failed to URL: {data.SecDocumentUrl}. No items found.");
+        Console.WriteLine($"Parsing URL: {data.SecDocumentUrl}");
+        try
+        {
+            var htmlDoc = await GetHtmlDocAsync(data.SecDocumentUrl);
+            var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
+            var table = GetHtmlTable(divNodes, htmlDoc);
+            if (table == null) throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No table found.");
+            var hrefs = GetAllHrefs(table);
+            var rows = table.SelectNodes(".//tr");
+            if (rows == null)throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
+            //data.Items = ParseRows(rows, hrefs, htmlDoc);
+            data.Items = ParseRowsParallelForEach(rows, hrefs, htmlDoc);
+            if (data.Items == null || data.Items.Count == 0) throw new Exception($"Failed to URL: {data.SecDocumentUrl}. No items found.");
 
-        await SaveResultToFile(data.Items, data.SecDocumentUrl);
+            await SaveResultToFile(data.Items, data.SecDocumentUrl);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            var failedDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Data/Failed");
+            Directory.CreateDirectory(failedDirectory);
+            var fileName = $"{DateTime.Now:yyyyMMddHHmmss}.txt";
+            var filePath = Path.Combine(failedDirectory, fileName);
+            await File.WriteAllTextAsync(filePath, data.SecDocumentUrl);
+        }
+        Console.WriteLine($"Finished parsing URL: {data.SecDocumentUrl}");
         return data;
     }
 
@@ -257,19 +275,21 @@ public class SecService : ISecService
 
         return tableNode;
     }
-
-    private List<Sec10KIndexDTO> ParseRows(HtmlNodeCollection rows, string[] hrefs, HtmlDocument htmlDoc)
+    
+    private List<Sec10KIndexDTO> ParseRowsParallelForEach(HtmlNodeCollection rows, string[] hrefs, HtmlDocument htmlDoc)
     {
-        var items = new List<Sec10KIndexDTO>();
+        Console.WriteLine($"Parsing {rows.Count} rows.");
+        var items = new ConcurrentBag<Sec10KIndexDTO>();
 
-        foreach (var row in rows)
+        Parallel.ForEach(rows.Cast<HtmlNode>(), row =>
         {
             var cols = row.SelectNodes(".//td");
             if (cols != null)
             {
                 var sectionData = new Sec10KIndexDTO();
-                var cellValues = cols.Select(cell => HtmlEntity.DeEntitize(cell.InnerText.Trim()))
-                    .Select(val => Regex.Replace(val, @"[^\u0000-\u007F]+", string.Empty))
+                var cellValues = cols.Select(cell =>
+                        HtmlEntity.DeEntitize(cell.InnerText.Trim()))
+                    .Select(val => Regex.Replace(val, @"[^\u0000-\u007F\u2019]+", string.Empty)) // Allow Unicode apostrophe
                     .Select(val => Regex.Replace(val, @"\n|&#160;", " "))
                     .Where(val => !string.IsNullOrEmpty(val))
                     .ToList();
@@ -279,36 +299,46 @@ public class SecService : ISecService
                     sectionData.Item = cellValues[0];
                     sectionData.ItemName = cellValues[1];
                     sectionData.ItemNameEnum = EnumEx.TryGetEnumFromDescription<Sec10KFormSectionEnum>(sectionData.ItemName);
-                    if (sectionData.ItemNameEnum==null)
+                    if (sectionData.ItemNameEnum == null)Console.WriteLine("Failed to parse item name.");
+                    if (ItemsToInclude.Any(item => item.Equals(sectionData.Item.Replace(" ", ""), StringComparison.OrdinalIgnoreCase)))
                     {
-                        Console.WriteLine("Failed to parse item name.");
-                    }
-                    var skipParse = ItemsToInclude.Any(item => item == sectionData?.ItemNameEnum);
-                    if(!skipParse) continue;
-                    
-                    var itemNameNode = cols.FirstOrDefault(cell => HtmlEntity.DeEntitize(cell.InnerText.Trim()) == sectionData.Item);
-                    if(itemNameNode==null)  Console.WriteLine($"Failed to get itemNameNode for {row}.");
-                    var nestedLinkNode = itemNameNode.SelectSingleNode(".//a");
-                    if (nestedLinkNode != null)
-                    {
-                        sectionData.ItemHref = nestedLinkNode.GetAttributeValue("href", string.Empty);
-                        var index = Array.IndexOf(hrefs, sectionData.ItemHref);
-                        if (index == -1) throw new Exception("Failed to find href in list of hrefs.");
-                        string nextHref = null;
-                        if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
-                        // Remove the '#' from the start of the ids if it's there
-                        if (sectionData.ItemHref.StartsWith("#")) sectionData.ItemHref = sectionData.ItemHref.Substring(1);
-                        if (nextHref.StartsWith("#")) nextHref = nextHref.Substring(1);
-                        var sections = GetHtmlSectionById(htmlDoc, sectionData.ItemHref, nextHref);
-                        if (sections?.Count > 0) sectionData.ItemValue = sections;
-                    }
+                        var itemNameNode = cols.FirstOrDefault(cell =>
+                        {
+                            var cleanedText = HtmlEntity.DeEntitize(cell.InnerText.Trim());
+                            cleanedText = Regex.Replace(cleanedText, @"\n|&#160;", string.Empty);
+                            return cleanedText.Contains(sectionData.ItemName);
+                        });
+                        if (itemNameNode == null) throw new Exception($"Failed to get itemNameNode for {row}.");
+                        var nestedLinkNode = itemNameNode.SelectSingleNode(".//a");
+                        if (nestedLinkNode != null)
+                        {
+                            sectionData.ItemHref = nestedLinkNode.GetAttributeValue("href", string.Empty);
+                            var index = Array.IndexOf(hrefs, sectionData.ItemHref);
+                            if (index == -1) throw new Exception("Failed to find href in list of hrefs.");
+                            string nextHref = null;
+                            if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
+                            // Remove the '#' from the start of the ids if it's there
+                            if (sectionData.ItemHref.StartsWith("#"))
+                                sectionData.ItemHref = sectionData.ItemHref.Substring(1);
+                            if (nextHref.StartsWith("#")) nextHref = nextHref.Substring(1);
 
-                    items.Add(sectionData);
+                            Console.WriteLine(
+                                $"Parsing section {sectionData.Item} with href {sectionData.ItemHref} and nextHref {nextHref}.");
+                            var sections = GetHtmlSectionById(htmlDoc, sectionData.ItemHref, nextHref);
+                            Console.WriteLine(
+                                $"Finished parsing section {sectionData.Item} with href {sectionData.ItemHref} and nextHref {nextHref}.");
+
+                            if (sections?.Count > 0) sectionData.ItemValue = sections;
+                        }
+
+                        items.Add(sectionData);
+                    }
                 }
             }
-        }
+        });
 
-        return items;
+        Console.WriteLine($"Finished parsing rows, {items.Count} items.");
+        return items.ToList();
     }
 
     private async Task<HtmlDocument> GetHtmlDocAsync(string url)
@@ -346,9 +376,9 @@ public class SecService : ISecService
         await File.WriteAllTextAsync(filePath, jsonData);
     }
 
-    private Dictionary<string, string> GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
+    private ConcurrentDictionary<string, string> GetHtmlSectionById(HtmlDocument htmlDoc, string startId, string endId)
     {
-        var sections = new Dictionary<string, StringBuilder>();
+        var sections = new ConcurrentDictionary<string, StringBuilder>();
 
         // Use XPath to find the elements with the specific ids
         var xPathStart = $"//*[@id='{startId}']";
@@ -360,31 +390,41 @@ public class SecService : ISecService
         var dicKey = string.Empty;
         while (currentNode != endNode)
         {
-            var dicValue = string.Empty;
             if (currentNode == null || currentNode.InnerHtml.Contains(endId)) break;
             if (currentNode?.Name == "#text" || !string.IsNullOrEmpty(currentNode?.InnerText))
             {
                 // This is a text node
-                var cleanedText = HtmlEntity.DeEntitize(currentNode.InnerText.Trim());
+                var innerText = currentNode.InnerText;
+                var cleanedText = HtmlEntity.DeEntitize(innerText.Trim());
                 if (string.IsNullOrEmpty(cleanedText)) continue;
-                var isSubSection = currentNode.InnerHtml.Contains("font-weight:bold") || currentNode.InnerHtml.Contains("text-decoration:underline");
+
+                var fontWeight = 0;
+                var stylePattern = @"font-weight:\s*(\d+)";
+                var styleMatch = Regex.Match(currentNode.InnerHtml, stylePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+                if (styleMatch.Success)
+                {
+                    fontWeight = int.Parse(styleMatch.Groups[1].Value);
+                }
+                var isSubSection = currentNode.InnerHtml.Contains("font-weight:bold")
+                                   || currentNode.InnerHtml.Contains("text-decoration:underline")
+                                   || fontWeight > 400;
+                var dicValue = new StringBuilder();
                 if (isSubSection)
                 {
                     dicKey = cleanedText;
                 }
                 else
                 {
-                    dicValue = cleanedText;
+                    dicValue = new StringBuilder(cleanedText);
                 }
-
-                // update dictionary by append value to existing key
-                if (sections.ContainsKey(dicKey) && !string.IsNullOrEmpty(dicValue))
+                if (sections.TryGetValue(dicKey, out var existingValue))
                 {
-                    sections[dicKey].Append(cleanedText);
+                    existingValue.Append(cleanedText);
                 }
-                else // create new key value pair
+                else
                 {
-                    sections[dicKey] = new StringBuilder(cleanedText);
+                    sections[dicKey] = dicValue;
                 }
             }
             else if (currentNode?.Name == "table")
@@ -406,7 +446,10 @@ public class SecService : ISecService
             
             currentNode = GetNextNode(currentNode);
         }
-        return sections.ToDictionary(pair => pair.Key, pair => pair.Value.ToString());
+        
+        return new ConcurrentDictionary<string, string>(
+            sections.ToDictionary(pair => pair.Key, pair => pair.Value.ToString())
+        );
     }
 
     private static HtmlNode GetNextNode(HtmlNode currentNode)
@@ -451,37 +494,6 @@ public class SecService : ISecService
             .ToArray();
 
         return hrefs;
-    }
-
-    private async Task AuditResult(List<SecDocumentData> data)
-    {
-        foreach (var document in data)
-        {
-            try
-            {
-                #if DEBUG
-                // audit the items to ensure all required items are present
-                var itemNames = document.Items.Where(item => item.ItemNameEnum.HasValue)
-                    .Select(item => item.ItemNameEnum.Value)
-                    .ToList();
-                var missingItems = itemsToInclude.Except(itemNames).ToList();
-
-                if (missingItems.Any())
-                    throw new Exception(
-                        $"url {document.SecDocumentUrl} is missing item: {string.Join(", ", missingItems)}");
-                #endif
-            }
-            catch (Exception e)
-            {
-                var failedDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Data/Failed");
-                Directory.CreateDirectory(failedDirectory);
-                var fileName = $"{DateTime.Now:yyyyMMddHHmmss}.txt";
-                var filePath = Path.Combine(failedDirectory, fileName);
-                await Task.Run(() => File.WriteAllText(filePath, document.SecDocumentUrl));
-
-                throw;
-            }
-        }
     }
     
     #endregion
