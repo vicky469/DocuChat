@@ -30,15 +30,19 @@ public class SecModule: CarterModule
 
         app.MapGet("/batch-get-sec-urls", async (ISecService service,
             [FromQuery(Name = "formType")] SecFormTypeEnum formType,
-            [FromQuery(Name = "companyList")] string companyList,
             [FromQuery(Name = "startDate")] string startDate,
-            [FromQuery(Name = "endDate")] string endDate
+            [FromQuery(Name = "endDate")] string endDate,
+            [FromQuery(Name = "companyList")] string? companyList
         ) =>
         {
-            var companies = companyList.Split(',')
-                .Select(int.Parse)
-                .Select(c => (SecCompanyEnum)c)
-                .ToList();
+            List<SecCompanyEnum>? companies = null;
+            if (!string.IsNullOrEmpty(companyList))
+            {
+                companies = companyList.Split(',')
+                    .Select(int.Parse)
+                    .Select(c => (SecCompanyEnum)c)
+                    .ToList();
+            }
             return await service.BatchGetDocumentUrls(new SecBatchGetUrlsRequest
             {
                 FormTypeEnum = formType, CompanyList = companies, StartDate = startDate,

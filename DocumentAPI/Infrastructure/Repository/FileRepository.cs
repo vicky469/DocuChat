@@ -42,4 +42,6 @@ public class FileRepository: IFileRepository
     {
         return Directory.EnumerateFiles(filePath, searchPattern).ToArray();
     }
+    
+    public async Task RemoveAndReplace (string filePath, string data) => await File.WriteAllTextAsync(filePath, data);
 }

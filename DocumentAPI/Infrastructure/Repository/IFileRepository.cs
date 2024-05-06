@@ -6,4 +6,5 @@ public interface IFileRepository
     Task SaveToFileAsync<T>(string fileDirectory, string fileName, T data);
     Task<T> ReadFromFileAsync<T>(string filePath);
     string[] IsFileExist(string filePath, string searchPattern);
+    Task RemoveAndReplace(string filePath, string data);
 }

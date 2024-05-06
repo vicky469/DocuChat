@@ -42,7 +42,6 @@
     <ItemGroup>
       <Folder Include="Data\Batch Urls\" />
       <Folder Include="Data\Failed\" />
-      <Folder Include="Data\Result\" />
       <Folder Include="notebook\" />
     </ItemGroup>
 

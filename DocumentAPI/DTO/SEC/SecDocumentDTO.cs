@@ -24,10 +24,20 @@ public class SecDocumentsParserResponse
     public string SecDocumentType { get; set; }
     public int RequestedUrls { get; set; }
     public int TotalItems { get; set; }
-    public List<SecDocumentData> Data { get; set; }
+    public List<SecDocumentData> Sections { get; set; }
     public int CountTotalItems()
     {
-        return Data.SelectMany(d => d.Items).Count();
+        return Sections.Sum(d => d.Items?.Count ?? 0);
+    }
+    public void CountTotalItemsPerSection()
+    {
+        if (Sections != null)
+        {
+            foreach (var section in Sections)
+            {
+                section.ItemsCnt = section.Items?.Count ?? 0;
+            }
+        }
     }
 }
 

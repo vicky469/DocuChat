@@ -1,10 +1,11 @@
+using DocumentAPI.Common.HttpClientFactory;
 using DocumentAPI.DTO.SEC;
 
 namespace DocumentAPI.Service.Integration.SEC;
 
 public interface ISecClientService
 {
-    public Task<string> MakeSecRequest(string url);
+    public Task<Response<string>> MakeSecRequestAsync(string url);
 
-    public Task<SecSearchResponse> MakeSecSearchRequest(SecBatchGetUrlsRequestDTO request);
+    public Task<Response<SecSearchResponse>> MakeSecSearchRequestAsync(SecBatchGetUrlsRequestDTO request);
 }

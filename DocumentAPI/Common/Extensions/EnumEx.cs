@@ -52,7 +52,7 @@ public static class EnumEx
     if (potentialMatches.Count > 0)
     {
         var bestMatch = potentialMatches.OrderByDescending(match => match.Item2).First();
-        if(bestMatch.Item2 > 0.7) return bestMatch.Item1;
+        return bestMatch.Item1;
     }
 
     return null;
@@ -75,14 +75,7 @@ public static class EnumEx
     {
         if (string.IsNullOrEmpty(source))
         {
-            if (string.IsNullOrEmpty(target))
-            {
-                return 1.0;
-            }
-            else
-            {
-                return 0.0;
-            }
+            return string.IsNullOrEmpty(target) ? 1.0 : 0.0;
         }
 
         if (string.IsNullOrEmpty(target))
@@ -90,29 +83,12 @@ public static class EnumEx
             return 0.0;
         }
 
-        int stepsToSame = ComputeLevenshteinDistance(source, target);
-        return (1.0 - ((double)stepsToSame / (double)Math.Max(source.Length, target.Length)));
+        var stepsToSame = ComputeLevenshteinDistance(source, target);
+        return 1.0 - (double)stepsToSame / (double)Math.Max(source.Length, target.Length);
     }
 
     private static int ComputeLevenshteinDistance(string source, string target)
     {
-        if (string.IsNullOrEmpty(source))
-        {
-            if (string.IsNullOrEmpty(target))
-            {
-                return 0;
-            }
-            else
-            {
-                return target.Length;
-            }
-        }
-
-        if (string.IsNullOrEmpty(target))
-        {
-            return source.Length;
-        }
-
         var sourceLength = source.Length;
         var targetLength = target.Length;
         var distance = new int[sourceLength + 1, targetLength + 1];

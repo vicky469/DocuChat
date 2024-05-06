@@ -1,6 +1,9 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using AutoMapper;
 using DocumentAPI.Common;
 using DocumentAPI.Common.Extensions;
+using DocumentAPI.Common.HttpClientFactory;
 using DocumentAPI.DTO.Common;
 using DocumentAPI.DTO.SEC;
 using DocumentAPI.Infrastructure.Entity;
@@ -58,79 +61,110 @@ public class SecService : ISecService
         {
             SecDocumentType = request.SecDocumentTypeEnum.GetDescription(),
             RequestedUrls = request.SecDocumentUrls.Length,
-            Data = new List<SecDocumentData>()
+            Sections = new List<SecDocumentData>()
         };
         var urlChunks = Utils.SplitIntoChunks(request.SecDocumentUrls);
         foreach (var urlChunk in urlChunks)
         {
             var tasks = urlChunk.Select(url =>
             {
-                var data = new SecDocumentData();
-                data.SecDocumentUrl = url;
-                return ProcessUrl(data);
+                var data = new SecDocumentData { SecDocumentUrl = url };
+                return ParseUrlAsync(data);
             });
+
             var results = await Task.WhenAll(tasks);
-            response.Data.AddRange(results);
+            response.Sections.AddRange(results);
         }
         
-        await AuditResult(response.Data);
+        await AuditResult(response.Sections);
         response.TotalItems = response.CountTotalItems();
-        response.Data.ForEach(d => d.ItemsCnt = d.Items.Count);
+        response.CountTotalItemsPerSection();
         return Results.Ok(response);
+    }
+    
+    public async Task<SecDocumentData> ParseUrlAsync(SecDocumentData data)
+    {
+        var htmlDoc = await GetHtmlDocAsync(data.SecDocumentUrl);
+        var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
+        var table = GetHtmlTable(divNodes, htmlDoc);
+        if (table == null) throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No table found.");
+        var hrefs = GetAllHrefs(table);
+        var rows = table.SelectNodes(".//tr");
+        if (rows == null)throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
+        data.Items = ParseRows(rows, hrefs, htmlDoc);
+        if (data.Items == null || data.Items.Count == 0) throw new Exception($"Failed to URL: {data.SecDocumentUrl}. No items found.");
+
+        await SaveResultToFile(data.Items, data.SecDocumentUrl);
+        return data;
     }
 
     public async Task<IResult> BatchGetDocumentUrls(SecBatchGetUrlsRequest request)
     {
         var finalUrls = new List<string>();
-        foreach (var company in request.CompanyList)
+        var companies = await CIKLookup(50);
+        
+        if(request?.CompanyList == null || request.CompanyList.Count == 0)
         {
-            var secUrls = await GetSecUrls(request, company);
-            var finalUrlsForCompany = new List<string>();
-            foreach (var url in secUrls)
+            foreach (var company in companies)
             {
-                var parts = url.Split(':', '-');
-                var first = parts[0].TrimStart('0');
-                var lastStartIndex = url.IndexOf(parts[3]);
-                var last = url.Substring(lastStartIndex);
-                var finalUrl = $"https://www.sec.gov/Archives/edgar/data/{first}/{parts[0]}{parts[1]}{parts[2]}/{last}";
-                finalUrlsForCompany.Add(finalUrl);
+                var companyDTO = companies.FirstOrDefault(c =>
+                    string.Equals(c.Ticker, company.CompanyEnum.GetDescription(), StringComparison.OrdinalIgnoreCase));
+                finalUrls.AddRange(await ProcessAndSaveUrlsAsync(request, companyDTO));
             }
-
-            // Save to file
-            var formType = request.FormTypeEnum.GetDescription();
-            var fileName = $"secUrls_{company.GetDescription()}_{formType}_{DateTime.Now:yyyyMMddHHmmss}.txt";
-            var fileDirectory = Path.Combine(Directory.GetCurrentDirectory(), FileRepository.BatchUrlDirectory);
-            await _fileRepository.SaveToFileAsync(fileDirectory,fileName, finalUrlsForCompany);
-            finalUrls.AddRange(finalUrlsForCompany);
         }
 
+        if (finalUrls.Count == 0) return Results.Problem("No URLs found for the specified companies.");
         return Results.Ok(finalUrls);
     }
 
     #region private methods
+    private async Task<List<string>> ProcessAndSaveUrlsAsync(SecBatchGetUrlsRequest request, CompanyDTO companyDTO)
+    {
+        var finalUrlsForCompany = new List<string>();
+        var secUrls = await GetSecUrlsAsync(request, companyDTO);
+        
+        foreach (var url in secUrls)
+        {
+            var parts = url.Split(':', '-');
+            var cik = companyDTO.CIK_Str;
+            var lastStartIndex = url.IndexOf(parts[3]);
+            var last = url.Substring(lastStartIndex);
+            var finalUrl = $"https://www.sec.gov/Archives/edgar/data/{cik}/{parts[0]}{parts[1]}{parts[2]}/{last}";
+            finalUrlsForCompany.Add(finalUrl);
+        }
+
+        // Save to file
+        if (secUrls.Count > 0)
+        {
+            var formType = request.FormTypeEnum.GetDescription();
+            var fileName = $"secUrls_{companyDTO.CompanyEnum.GetDescription()}_{formType}_{DateTime.Now:yyyyMMddHHmmss}.txt";
+            var fileDirectory = Path.Combine(Directory.GetCurrentDirectory(), FileRepository.BatchUrlDirectory);
+            await _fileRepository.SaveToFileAsync(fileDirectory,fileName, finalUrlsForCompany);
+        }
+
+        return finalUrlsForCompany;
+    }
 
     private string? GetCallingApp() => _httpContextAccessor?.HttpContext?.Request?.Headers[Constants.XCallingApp].ToString();
 
-    private async Task<List<string>> GetSecUrls(SecBatchGetUrlsRequest request, SecCompanyEnum currnetCompany)
+    private async Task<List<string>> GetSecUrlsAsync(SecBatchGetUrlsRequest request, CompanyDTO companyDTO)
     {
-        var companies = await CIKLookup();
+        var idList = new List<string>();
         var secRequest = new SecBatchGetUrlsRequestDTO();
-        var company = companies.FirstOrDefault(c =>
-            string.Equals(c.Title, currnetCompany.GetDescription(), StringComparison.OrdinalIgnoreCase));
-        if (company != null)
+        if (companyDTO != null)
         {
-            secRequest.CIK = company.CIK_Str_Padded;
+            secRequest.CIK = companyDTO.CIK_Str_Padded;
             secRequest.FormTypeEnum = request.FormTypeEnum;
             secRequest.StartDate = request.StartDate;
             secRequest.EndDate = request.EndDate;
         }
 
-        var data = await _secClient.MakeSecSearchRequest(secRequest);
-        var idList = data?.hits.hits.Select(hit => hit._id).ToList();
-        return idList;
+        var response = await _secClient.MakeSecSearchRequestAsync(secRequest);
+        if (!response.IsSuccess) return idList;
+        return response?.Data?.hits.hits.Select(hit => hit._id).ToList();
     }
     
-    private async Task<List<CompanyDTO>> CIKLookup()
+    private async Task<List<CompanyDTO>> CIKLookup(int size)
     {
         List<CompanyDTO> companies;
         var fileDirectory = FileRepository.PersistentDataDirectory;
@@ -139,80 +173,90 @@ public class SecService : ISecService
         {
             var filePath = Path.Combine(fileDirectory, "company_tickers.json");
             var jsonData = await File.ReadAllTextAsync(filePath);
-            var companyEntities = JsonConvert.DeserializeObject<Dictionary<string, CompanyEntity>>(jsonData);
-            companies = _mapper.Map<List<CompanyEntity>, List<CompanyDTO>>(companyEntities.Values.ToList());
+            var companyEntities = JsonConvert.DeserializeObject<Dictionary<string, CompanyEntity>>(jsonData).Values.Take(50).ToList();
+            //await BuildCompanyEnumAsync(companyEntities, fileDirectory);
+            companies = _mapper.Map<List<CompanyEntity>, List<CompanyDTO>>(companyEntities);
             await _fileRepository.SaveToFileAsync(fileDirectory,$"transformed_company_tickers_{DateTime.Now:yyyyMMddHHmmss}.json", companies);
         }
         else
         {
             var filePath = existingFiles.First();
             var jsonData = await File.ReadAllTextAsync(filePath);
-            var companyEntities = JsonConvert.DeserializeObject<Dictionary<string, CompanyEntity>>(jsonData);
-            companies = _mapper.Map<List<CompanyEntity>, List<CompanyDTO>>(companyEntities.Values.ToList());
+            companies = JsonConvert.DeserializeObject<List<CompanyDTO>>(jsonData);
         }
-
         return companies;
     }
 
-    private async Task<SecDocumentData> ProcessUrl(SecDocumentData data)
+    private async Task BuildCompanyEnumAsync(List<CompanyEntity> companyEntities)
     {
-        var htmlDoc = await GetHtmlDoc(data.SecDocumentUrl);
-        var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
-        if (divNodes == null)
+        var enumBuilder = new StringBuilder();
+        enumBuilder.AppendLine("public enum SecCompanyEnum");
+        enumBuilder.AppendLine("{");
+        int enumValue = 1;
+        foreach (var company in companyEntities)
         {
-            Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No div nodes found.");
-            return data;
+            // Convert the company name to a valid enum name (remove spaces and special characters)
+            var enumName = Regex.Replace(company.Title, "[^a-zA-Z0-9_]", "");
+
+            // Add the enum entry
+            enumBuilder.AppendLine($"    [Description(\"{company.Ticker}\")]");
+            enumBuilder.AppendLine($"    {enumName} = {enumValue},");
+            enumValue++;
         }
 
-        var table = GetHtmlTable(divNodes, htmlDoc);
-        if (table == null)
-        {
-            Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No div nodes found.");
-            return data;
-        }
+        enumBuilder.AppendLine("}");
 
-        var hrefs = GetAllHrefs(htmlDoc);
-        var rows = table.SelectNodes(".//tr");
-        if (rows == null)
-        {
-            Console.WriteLine($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
-            return data;
-        }
-
-        data.Items = ParseRows(rows, hrefs, htmlDoc);
-        if (data.Items?.Count == 0) Console.WriteLine($"Failed to URL: {data.SecDocumentUrl}. No items found.");
-        await SaveResultToFile(data.Items, data.SecDocumentUrl);
-
-        return data;
+        // Save the enum 
+        await _fileRepository.RemoveAndReplace("DocumentAPI/DTO/SEC/SecCompanyEnum.cs", enumBuilder.ToString());
     }
 
-    private static HtmlNode? GetHtmlTable(HtmlNodeCollection divNodes, HtmlDocument htmlDoc)
+    private static HtmlNode GetHtmlTable(HtmlNodeCollection divNodes, HtmlDocument htmlDoc)
     {
+        HtmlNode tableNode = null;
+        // 1st try
+        foreach (var keyword in IndexKeywords)
+        {
+            var keywordNode = htmlDoc.DocumentNode.SelectSingleNode($"//*[text()[contains(., '{keyword}')]]");
+
+            if (keywordNode != null)
+            {
+                for (int i = 1; i <= 5; i++)
+                {
+                    var potentialNode = keywordNode.SelectSingleNode($".//following-sibling::node()[{i}]");
+                    if (potentialNode?.InnerText != null && potentialNode.InnerText.Contains("PART"))
+                    {
+                        return potentialNode.SelectSingleNode(".//following-sibling::table");
+                    }
+                }
+            }
+        }
+        
+        // 2nd try
         var divIndex = 0;
         for (var i = 0; i < divNodes.Count; i++)
         {
-            if(IndexKeywords.Any(keyword => divNodes[i].InnerHtml.IndexOf(keyword) >= 0))
+            if (IndexKeywords.Any(keyword => divNodes[i].InnerHtml.IndexOf(keyword) >= 0))
             {
                 divIndex = i + 1; // XPath is 1-indexed 
-                while (divIndex < divNodes.Count && string.IsNullOrWhiteSpace(divNodes[divIndex].InnerText)) divIndex++;
+                while (divIndex < divNodes.Count && string.IsNullOrWhiteSpace(divNodes[divIndex].InnerText))
+                    divIndex++;
                 break;
             }
         }
-
-        HtmlNode table = null;
-        string tableXPath = null;
+        
         if (divIndex > 0)
         {
-            tableXPath = $"//html/body/div[{divIndex + 1}]/table";
-            table = htmlDoc.DocumentNode.SelectSingleNode(tableXPath);
-            if (table == null)
+            var tableXPath = $"//html/body/div[{divIndex + 1}]/table";
+            tableNode = htmlDoc.DocumentNode.SelectSingleNode(tableXPath);
+            if (tableNode == null)
             {
                 tableXPath = $"//html/body/div[{divIndex + 1}]/div/table";
-                table = htmlDoc.DocumentNode.SelectSingleNode(tableXPath);
+                tableNode = htmlDoc.DocumentNode.SelectSingleNode(tableXPath);
             }
         }
+        
 
-        return table;
+        return tableNode;
     }
 
     private List<Sec10KIndexDTO> ParseRows(HtmlNodeCollection rows, string[] hrefs, HtmlDocument htmlDoc)
@@ -225,12 +269,16 @@ public class SecService : ISecService
             if (cols != null)
             {
                 var sectionData = new Sec10KIndexDTO();
-                var cellValues = cols.Select(cell => cell.InnerText.Trim()).ToList();
+                var cellValues = cols.Select(cell => HtmlEntity.DeEntitize(cell.InnerText.Trim()))
+                    .Select(val => Regex.Replace(val, @"[^\u0000-\u007F]+", string.Empty))
+                    .Select(val => Regex.Replace(val, @"\n|&#160;", " "))
+                    .Where(val => !string.IsNullOrEmpty(val))
+                    .ToList();
                 var containsItem = cellValues.Any(value => value.Contains("Item"));
                 if (containsItem)
                 {
-                    sectionData.Item = cols[0].InnerText.Replace(".","");
-                    sectionData.ItemName = HtmlEntity.DeEntitize(cols[1].InnerText.Trim());
+                    sectionData.Item = cellValues[0].Replace(".","");
+                    sectionData.ItemName = cellValues[1];
                     sectionData.ItemNameEnum = EnumEx.TryGetEnumFromDescription<Sec10KFormSectionEnum>(sectionData.ItemName);
                     if (sectionData.ItemNameEnum==null)
                     {
@@ -239,11 +287,14 @@ public class SecService : ISecService
                     var skipParse = ItemsToInclude.Any(item => item == sectionData?.ItemNameEnum);
                     if(!skipParse) continue;
                     
-                    var nestedLinkNode = cols[1].SelectSingleNode(".//a");
+                    var itemNameNode = cols.FirstOrDefault(cell => HtmlEntity.DeEntitize(cell.InnerText.Trim()) == sectionData.ItemName);
+                    if(itemNameNode==null)  Console.WriteLine($"Failed to get itemNameNode for {row}.");
+                    var nestedLinkNode = itemNameNode.SelectSingleNode(".//a");
                     if (nestedLinkNode != null)
                     {
                         sectionData.ItemHref = nestedLinkNode.GetAttributeValue("href", string.Empty);
                         var index = Array.IndexOf(hrefs, sectionData.ItemHref);
+                        if (index == -1) throw new Exception("Failed to find href in list of hrefs.");
                         string nextHref = null;
                         if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
                         var sections = GetHtmlSectionById(htmlDoc, sectionData.ItemHref, nextHref);
@@ -258,25 +309,28 @@ public class SecService : ISecService
         return items;
     }
 
-    private async Task<HtmlDocument> GetHtmlDoc(string url)
+    private async Task<HtmlDocument> GetHtmlDocAsync(string url)
     {
         var htmlDoc = new HtmlDocument();
         var fileName = Path.GetFileName(url);
         var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Raw");
         Directory.CreateDirectory(dataDirectory); // Ensure the directory exists
         var filePath = Path.Combine(dataDirectory, fileName);
-        string content;
+        Response<string> response = new Response<string>();
         if (!File.Exists(filePath))
         {
-            content = await _secClient.MakeSecRequest(url);
-            await File.WriteAllTextAsync(filePath, content);
+            response = await _secClient.MakeSecRequestAsync(url);
+            if (response.IsSuccess)
+            {
+                await File.WriteAllTextAsync(filePath, response.Data);
+            }
         }
         else
         {
-            content = await File.ReadAllTextAsync(filePath);
+            response.Data = await File.ReadAllTextAsync(filePath);
         }
 
-        htmlDoc.LoadHtml(content);
+        htmlDoc.LoadHtml(response.Data);
         return htmlDoc;
     }
 
@@ -314,6 +368,7 @@ public class SecService : ISecService
             {
                 // This is a text node
                 var cleanedText = HtmlEntity.DeEntitize(currentNode.InnerText.Trim());
+                if (string.IsNullOrEmpty(cleanedText)) continue;
                 var isSubSection = currentNode.InnerHtml.Contains("font-weight:bold") || currentNode.InnerHtml.Contains("text-decoration:underline");
                 if (isSubSection)
                 {
@@ -381,10 +436,10 @@ public class SecService : ISecService
         return currentNode;
     }
 
-    private static string[] GetAllHrefs(HtmlDocument htmlDoc)
+    private static string[] GetAllHrefs(HtmlNode tableNode)
     {
         // Use XPath to find all 'a' elements
-        var linkNodes = htmlDoc.DocumentNode.SelectNodes("//a");
+        var linkNodes = tableNode.SelectNodes("//a");
 
         if (linkNodes == null) return new string[0];
 
@@ -393,7 +448,7 @@ public class SecService : ISecService
             .Select(node => node.GetAttributeValue("href", string.Empty))
             .Where(href => !string.IsNullOrEmpty(href))
             .GroupBy(href => href)
-            .SelectMany(group => group.Skip(1))
+            .SelectMany(group => group.Count() > 1 ? group.Skip(1) : group)
             .Distinct()
             .ToArray();
 

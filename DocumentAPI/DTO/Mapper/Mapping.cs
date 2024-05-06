@@ -11,7 +11,7 @@ public class AutoMapperProfile : Profile
     {
         CreateMap<CompanyEntity, CompanyDTO>()
             .ForMember(dest => dest.CompanyEnum,
-                opt => opt.MapFrom(src => EnumEx.TryGetEnumFromDescription<SecCompanyEnum>(src.Title)))
+                opt => opt.MapFrom(src => EnumEx.TryGetEnumFromDescription<SecCompanyEnum>(src.Ticker)))
             .ForMember(dest => dest.CIK_Str_Padded,
                 opt => opt.MapFrom(src => src.CIK_Str.ToString().PadLeft(10, '0')))
             .ForMember(dest => dest.Ticker,
