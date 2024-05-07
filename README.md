@@ -13,8 +13,11 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
 4. Run the project.
    
    <img src="./swagger.png" width="50%" height="50%">
-![batch get url](https://github.com/vicky469/DocumentAPI/assets/127980880/e3ba63a3-4add-41d9-a88d-299b7d628ed2)
-![parser](https://github.com/vicky469/DocumentAPI/assets/127980880/f5db0aeb-3256-497a-a9ed-147843f0d8c3)
+   ### ParseDocuments
+    <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/e3ba63a3-4add-41d9-a88d-299b7d628ed2" width="50%" height="50%">
+   ### BatchGetDocumentUrls
+    <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/f5db0aeb-3256-497a-a9ed-147843f0d8c3" width="50%" height="50%">
+
 
 
 ## How It was built
