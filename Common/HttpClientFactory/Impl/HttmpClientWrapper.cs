@@ -1,6 +1,7 @@
-using DocumentAPI.Common.Config;
+using Common.Config;
+using Microsoft.AspNetCore.Http;
 
-namespace DocumentAPI.Common.HttpClientFactory.Impl;
+namespace Common.HttpClientFactory.Impl;
 
 public class HttpClientWrapper : HttpClientBase, IHttpClientWrapper
 {

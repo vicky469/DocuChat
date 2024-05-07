@@ -1,4 +1,4 @@
-namespace DocumentAPI.Common.Config;
+namespace Common.Config;
 
 public class WebClientConfigSettings
 {

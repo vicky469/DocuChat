@@ -1,7 +1,7 @@
-using DocumentAPI.Common.Config;
+using Common.Config;
 using Newtonsoft.Json;
 
-namespace DocumentAPI.Common.HttpClientFactory.Impl;
+namespace Common.HttpClientFactory.Impl;
 
 public class HttpClientBase : IHttpClient
 {

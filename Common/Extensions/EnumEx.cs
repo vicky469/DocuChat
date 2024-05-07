@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Text.RegularExpressions;
 
-namespace DocumentAPI.Common.Extensions;
+namespace Common.Extensions;
 
 public static class EnumEx
 {

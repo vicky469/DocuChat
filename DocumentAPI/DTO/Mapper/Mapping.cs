@@ -1,5 +1,5 @@
 using AutoMapper;
-using DocumentAPI.Common.Extensions;
+using Common.Extensions;
 using DocumentAPI.DTO.SEC;
 using DocumentAPI.Infrastructure.Entity;
 

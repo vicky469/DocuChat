@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace DocumentAPI.Common.HttpClientFactory;
+namespace Common.HttpClientFactory;
 
 public class Response<T>
 {

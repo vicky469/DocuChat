@@ -1,4 +1,4 @@
-using DocumentAPI.Common.HttpClientFactory;
+using Common.HttpClientFactory;
 using DocumentAPI.DTO.SEC;
 
 namespace DocumentAPI.Service.Integration.SEC;

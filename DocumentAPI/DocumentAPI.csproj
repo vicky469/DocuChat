@@ -46,4 +46,8 @@
       <Folder Include="notebook\" />
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\Common\Common.csproj" />
+    </ItemGroup>
+
 </Project>

@@ -1,8 +1,9 @@
 using System.Net;
 using System.Text.Json;
 using Carter;
-using DocumentAPI.Common.HttpClientFactory;
-using DocumentAPI.Common.HttpClientFactory.Impl;
+using Common.Config;
+using Common.HttpClientFactory;
+using Common.HttpClientFactory.Impl;
 using DocumentAPI.DTO.Mapper;
 using DocumentAPI.Infrastructure.Repository;
 using DocumentAPI.Service;
@@ -10,7 +11,7 @@ using DocumentAPI.Service.Integration.SEC;
 using Polly;
 using Unchase.Swashbuckle.AspNetCore.Extensions.Extensions;
 
-namespace DocumentAPI.Common.Config;
+namespace DocumentAPI;
 
 public static class ServiceInitializer
 {

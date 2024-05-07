@@ -1,5 +1,5 @@
-using DocumentAPI.Common.Extensions;
-using DocumentAPI.Common.HttpClientFactory;
+using Common.Extensions;
+using Common.HttpClientFactory;
 using DocumentAPI.DTO.Common;
 using DocumentAPI.DTO.SEC;
 using System.Text.Json;

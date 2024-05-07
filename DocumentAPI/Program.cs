@@ -1,5 +1,5 @@
 using Carter;
-using DocumentAPI.Common.Config;
+using DocumentAPI;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddConfig(builder.Configuration)

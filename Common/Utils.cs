@@ -1,4 +1,4 @@
-namespace DocumentAPI.Common;
+namespace Common;
 
 public static class Utils
 {

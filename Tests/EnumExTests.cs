@@ -1,4 +1,4 @@
-using DocumentAPI.Common.Extensions;
+using Common.Extensions;
 using DocumentAPI.DTO.SEC;
 
 namespace Tests;

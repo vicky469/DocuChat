@@ -1,4 +1,4 @@
-namespace DocumentAPI.Common.HttpClientFactory;
+namespace Common.HttpClientFactory;
 
 public interface IHttpClientWrapper
 {
