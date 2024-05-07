@@ -80,6 +80,7 @@ public class SecService : ISecService
         }
         response.TotalItems = response.CountTotalItems();
         response.CountTotalItemsPerSection();
+        response.FailedUrls = response.CountTotalFailedUrls();
         return Results.Ok(response);
     }
     
@@ -89,12 +90,13 @@ public class SecService : ISecService
         try
         {
             var htmlDoc = await GetHtmlDocAsync(data.SecDocumentUrl);
-            var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
-            var table = GetHtmlTable(divNodes, htmlDoc);
+            var table = GetHtmlTable(htmlDoc);
             if (table == null) throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No table found.");
+            
             var hrefs = GetAllHrefs(table);
             var rows = table.SelectNodes(".//tr");
             if (rows == null)throw new Exception($"Failed to parse URL: {data.SecDocumentUrl}. No rows found.");
+            
             data.Items = ParseRowsParallel(rows, hrefs, htmlDoc,data.TargetItemsInDocument);
             if (data.Items == null || data.Items.Count == 0) throw new Exception($"Failed to URL: {data.SecDocumentUrl}. No items found.");
             data.Items = data.Items.OrderBy(item => item.ItemNameEnum).ToList();
@@ -202,32 +204,10 @@ public class SecService : ISecService
         return companies;
     }
 
-    private async Task BuildCompanyEnumAsync(List<CompanyEntity> companyEntities)
-    {
-        var enumBuilder = new StringBuilder();
-        enumBuilder.AppendLine("public enum SecCompanyEnum");
-        enumBuilder.AppendLine("{");
-        int enumValue = 1;
-        foreach (var company in companyEntities)
-        {
-            // Convert the company name to a valid enum name (remove spaces and special characters)
-            var enumName = Regex.Replace(company.Title, "[^a-zA-Z0-9_]", "");
-
-            // Add the enum entry
-            enumBuilder.AppendLine($"    [Description(\"{company.Ticker}\")]");
-            enumBuilder.AppendLine($"    {enumName} = {enumValue},");
-            enumValue++;
-        }
-
-        enumBuilder.AppendLine("}");
-
-        // Save the enum 
-        await _fileRepository.RemoveAndReplace("DocumentAPI/DTO/SEC/SecCompanyEnum.cs", enumBuilder.ToString());
-    }
-
-    private static HtmlNode GetHtmlTable(HtmlNodeCollection divNodes, HtmlDocument htmlDoc)
+    private static HtmlNode GetHtmlTable(HtmlDocument htmlDoc)
     {
         HtmlNode tableNode = null;
+        var divNodes = htmlDoc.DocumentNode.SelectNodes("//html/body/div");
         // 1st try
         foreach (var keyword in IndexKeywords)
         {
@@ -284,7 +264,6 @@ public class SecService : ISecService
             var cols = row.SelectNodes(".//td");
             if (cols != null)
             {
-                var sectionData = new Sec10KIndexDTO();
                 var cellValues = cols.Select(cell =>
                         HtmlEntity.DeEntitize(cell.InnerText.Trim()))
                     .Select(val => Regex.Replace(val, @"[^\u0000-\u007F\u2019]+", string.Empty)) // Allow Unicode apostrophe
@@ -294,49 +273,53 @@ public class SecService : ISecService
                 var containsItem = cellValues.Any(value => value.Contains("Item"));
                 if (containsItem)
                 {
-                    sectionData.Item = cellValues[0];
-                    sectionData.ItemName = cellValues[1];
+                    var sectionData = new Sec10KIndexDTO
+                    {
+                        Item = cellValues[0],
+                        ItemName = cellValues[1]
+                    };
                     sectionData.ItemNameEnum = EnumEx.TryGetEnumFromDescription<Sec10KFormSectionEnum>(sectionData.ItemName);
                     if (sectionData.ItemNameEnum == null)Console.WriteLine("Failed to parse item name.");
-                    if (targetItemsInDocument.Any(item => item.Equals(sectionData.Item.Replace(" ", "").TrimEnd('.'), StringComparison.OrdinalIgnoreCase)))
-                    {
-                        var itemNameNode = cols.FirstOrDefault(cell =>
-                        {
-                            var cleanedText = HtmlEntity.DeEntitize(cell.InnerText.Trim());
-                            cleanedText = Regex.Replace(cleanedText, @"\n|&#160;", string.Empty);
-                            return cleanedText.Contains(sectionData.ItemName);
-                        });
-                        if (itemNameNode == null) throw new Exception($"Failed to get itemNameNode for {row}.");
-                        var nestedLinkNode = itemNameNode.SelectSingleNode(".//a");
-                        if (nestedLinkNode != null)
-                        {
-                            sectionData.ItemHref = nestedLinkNode.GetAttributeValue("href", string.Empty);
-                            var index = Array.IndexOf(hrefs, sectionData.ItemHref);
-                            if (index == -1) throw new Exception("Failed to find href in list of hrefs.");
-                            string nextHref = null;
-                            if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
-                            // Remove the '#' from the start of the ids if it's there
-                            if (sectionData.ItemHref.StartsWith("#"))
-                                sectionData.ItemHref = sectionData.ItemHref.Substring(1);
-                            if (nextHref.StartsWith("#")) nextHref = nextHref.Substring(1);
-
-                            Console.WriteLine(
-                                $"Parsing section {sectionData.Item} with href {sectionData.ItemHref} and nextHref {nextHref}.");
-                            var sections = GetHtmlSectionById(htmlDoc, sectionData.ItemHref, nextHref);
-                            Console.WriteLine(
-                                $"Finished parsing section {sectionData.Item} with href {sectionData.ItemHref} and nextHref {nextHref}.");
-
-                            if (sections?.Count > 0) sectionData.ItemValue = sections;
-                        }
-
-                        items.Add(sectionData);
-                    }
+                    if (targetItemsInDocument.Any(item => item.Equals(sectionData.Item.Replace(" ", "").TrimEnd('.'), StringComparison.OrdinalIgnoreCase))) 
+                        AddSectionDetail(hrefs, htmlDoc, cols, sectionData, row, items);
                 }
             }
         });
 
         Console.WriteLine($"Finished parsing rows, {items.Count} items.");
         return items.ToList();
+    }
+
+    private void AddSectionDetail(string[] hrefs, HtmlDocument htmlDoc, HtmlNodeCollection cols, Sec10KIndexDTO sectionData,
+        HtmlNode row, ConcurrentBag<Sec10KIndexDTO> items)
+    {
+        var itemNameNode = cols.FirstOrDefault(cell =>
+        {
+            var cleanedText = HtmlEntity.DeEntitize(cell.InnerText.Trim());
+            cleanedText = Regex.Replace(cleanedText, @"\n|&#160;", string.Empty);
+            return cleanedText.Contains(sectionData.ItemName);
+        });
+        if (itemNameNode == null) throw new Exception($"Failed to get itemNameNode for {row}.");
+        var nestedLinkNode = itemNameNode.SelectSingleNode(".//a");
+        if (nestedLinkNode != null)
+        {
+            sectionData.ItemHref = nestedLinkNode.GetAttributeValue("href", string.Empty);
+            var index = Array.IndexOf(hrefs, sectionData.ItemHref);
+            if (index == -1) throw new Exception("Failed to find href in list of hrefs.");
+            string nextHref = null;
+            if (index >= 0 && index < hrefs.Length - 1) nextHref = hrefs[index + 1];
+            // Remove the '#' from the start of the ids if it's there
+            if (sectionData.ItemHref.StartsWith("#"))
+                sectionData.ItemHref = sectionData.ItemHref.Substring(1);
+            if (nextHref.StartsWith("#")) nextHref = nextHref.Substring(1);
+
+            Console.WriteLine($"Parsing section {sectionData.Item} with href {sectionData.ItemHref} and nextHref {nextHref}.");
+            var sections = GetHtmlSectionById(htmlDoc, sectionData.ItemHref, nextHref);
+            Console.WriteLine($"Finished parsing section {sectionData.Item} with href {sectionData.ItemHref} and nextHref {nextHref}.");
+
+            if (sections?.Count > 0) sectionData.ItemValue = sections;
+        }
+        items.Add(sectionData);
     }
 
     private async Task<HtmlDocument> GetHtmlDocAsync(string url)
@@ -427,6 +410,9 @@ public class SecService : ISecService
                 // Parse Text
                 var innerText = currentNode.InnerText;
                 var cleanedText = HtmlEntity.DeEntitize(innerText.Trim());
+                var textBeforeDot = cleanedText.Split('.')[0].Trim();
+                if (ItemsToInclude.Any(item => item.Equals(textBeforeDot, StringComparison.OrdinalIgnoreCase)))
+                    continue;
                 if (string.IsNullOrEmpty(cleanedText))
                 {
                     currentNode = GetNextNode(currentNode);
@@ -512,6 +498,29 @@ public class SecService : ISecService
             .ToArray();
 
         return hrefs;
+    }
+    
+    private async Task BuildCompanyEnumAsync(List<CompanyEntity> companyEntities)
+    {
+        var enumBuilder = new StringBuilder();
+        enumBuilder.AppendLine("public enum SecCompanyEnum");
+        enumBuilder.AppendLine("{");
+        int enumValue = 1;
+        foreach (var company in companyEntities)
+        {
+            // Convert the company name to a valid enum name (remove spaces and special characters)
+            var enumName = Regex.Replace(company.Title, "[^a-zA-Z0-9_]", "");
+
+            // Add the enum entry
+            enumBuilder.AppendLine($"    [Description(\"{company.Ticker}\")]");
+            enumBuilder.AppendLine($"    {enumName} = {enumValue},");
+            enumValue++;
+        }
+
+        enumBuilder.AppendLine("}");
+
+        // Save the enum 
+        await _fileRepository.RemoveAndReplace("DocumentAPI/DTO/SEC/SecCompanyEnum.cs", enumBuilder.ToString());
     }
     
     #endregion

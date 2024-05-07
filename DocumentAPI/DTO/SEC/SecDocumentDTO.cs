@@ -25,6 +25,7 @@ public class SecDocumentsParserResponse
 {
     public string SecDocumentType { get; set; }
     public int RequestedUrls { get; set; }
+    public int FailedUrls { get; set; }
     public int TotalItems { get; set; }
     public List<SecDocumentData> Sections { get; set; }
     public int CountTotalItems()
@@ -41,6 +42,7 @@ public class SecDocumentsParserResponse
             }
         }
     }
+    public int CountTotalFailedUrls() => Sections.Count(d => d.ItemsCnt == 0);
 }
 
 public class SecDocumentData
@@ -58,6 +60,7 @@ public class Sec10KIndexDTO
     public string ItemName { get; set; }
     [JsonIgnore]
     public Sec10KFormSectionEnum? ItemNameEnum { get; set; }
+    [JsonIgnore]
     public string ItemHref { get; set; }
     public Dictionary<string,string> ItemValue { get; set; }
 }
