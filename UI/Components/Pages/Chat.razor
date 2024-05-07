@@ -1,0 +1,153 @@
+﻿@page "/chat"
+@using UI.Model
+@using UI.Services
+@attribute [StreamRendering]
+@inject OpenAIService OpenAiService
+<PageTitle>Chat</PageTitle>
+
+<style>
+    .chat-container {
+        height: 350px;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        padding: 10px;
+    }
+
+    .chat-message {
+        background-color: #f1f1f1;
+        border-radius: 5px;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+
+    .user-message {
+        background-color: #e2f3ff;
+    }
+
+    .bot-message {
+        background-color: #d4edda;
+    }
+
+    .message-input {
+        display: flex;
+        margin-top: 20px;
+    }
+
+    .message-input input {
+        flex: 1;
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+    }
+
+    .message-input-button {
+        margin-left: 10px;
+        padding: 10px;
+       
+        
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        
+    }
+
+    .enabled {
+        color: white;
+        cursor: pointer;
+        background-color: #007bff;
+       
+    }
+    .disabled {
+        color: #fff;
+        background-color: red;
+        cursor: not-allowed;
+    }
+
+    .loading-bar {
+        display: none;
+        width: 100%;
+        height: 4px;
+        background-color: #007bff;
+        transition: width 0.3s;
+    }
+
+        .loading-bar.show {
+            display: block;
+        }
+   
+</style>
+
+<div id="chatbox" class="chat-container">
+    @foreach (var message in chatMessages)
+    {
+        <div class="chat-message @(message.IsUserMessage ? "user-message" : "bot-message")">
+
+            @((MarkupString)@message.Text.Replace(Environment.NewLine, "<br>"))
+        </div>
+    }
+</div>
+
+
+<div class="message-input">
+
+    <input disabled="@isLoading" type="text" @bind="@userInput" @oninput="HandleInput" placeholder="Enter your message" />
+    <button disabled="@string.IsNullOrEmpty(userInput)"
+            class="@(string.IsNullOrEmpty(userInput) || isLoading ?  "disabled" :  "enabled")"
+    @onclick="SendMessage">
+        <span>@buttonText</span>
+        <div class="loading-bar @(isLoading ? "show" : "")"></div>
+    </button>
+    <div class="loading-bar @(isLoading ? "show" : "")" style="width: @progressWidth;"></div>
+</div>
+
+
+@code{
+    private string buttonText = "Send";
+    private string progressWidth = "0%";
+    private bool isLoading = false;
+    private string userInput;
+    private List<ChatMessage> chatMessages = new List<ChatMessage>();
+    private string apiRespone = string.Empty;
+
+
+    private async Task SendMessage()
+    {
+        buttonText = "Loading...";
+
+        isLoading = true;
+        StateHasChanged();
+        try
+        {
+            chatMessages.Add(new ChatMessage(userInput, true)); // Add user's message
+
+            // Call ChatGPT API or any other logic to generate the bot's response
+            apiRespone = await GenerateBotResponse(userInput).ConfigureAwait(false);
+
+            chatMessages.Add(new ChatMessage(apiRespone, false)); // Add bot's response
+            userInput = string.Empty; // Clear the input text box
+                                      // ScrollToBottom();
+        }
+        catch (Exception ex)
+        {
+            apiRespone = $"API call failed with exception: {ex.Message}";
+        }
+
+        isLoading = false;
+        buttonText = "Send";
+
+        StateHasChanged();
+    }
+
+    private void HandleInput(ChangeEventArgs e)
+    {
+        userInput = e.Value.ToString();
+    }
+
+    private async Task<string> GenerateBotResponse(string userInput)
+    {
+        string apiResponse = string.Empty;
+        apiResponse = await OpenAiService.GenerateCompletion(userInput).ConfigureAwait(false);
+        return apiResponse;
+    }
+
+}
