@@ -6,7 +6,7 @@ public class SecBatchGetUrlsRequest
     public string EndDate { get; set; }
     public SecFormTypeEnum FormTypeEnum { get; set; }
     public List<SecCompanyEnum>? CompanyList { get; set; }
-    public int Size { get; set; }
+    public int Size { get; set; } = 50;
 }
 
 

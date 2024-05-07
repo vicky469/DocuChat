@@ -39,7 +39,6 @@ public static class ServiceInitializer
         services.AddScoped<IFileRepository, FileRepository>();
         services.AddSingleton<IHttpClientWrapper, HttpClientWrapper>();
         services.AddSingleton<IHttpClient, HttpClientBase>();
-        services.AddSingleton<IRateLimitedHttpClient, RateLimitedHttpClient>();
         return services;
     }
 
@@ -63,7 +62,7 @@ public static class ServiceInitializer
                     config.BaseAddress = new Uri(clientConfig.BaseUrl);
                     config.Timeout = new TimeSpan(0, 0, clientConfig.TimeoutInSeconds);
                 })
-                .ConfigurePrimaryHttpMessageHandler(x => new HttpClientHandler() 
+                .ConfigurePrimaryHttpMessageHandler(x => new HttpClientHandler()
                 {
                     AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
                 })
@@ -72,8 +71,15 @@ public static class ServiceInitializer
                 .AddTransientHttpErrorPolicy(policyBuilder => policyBuilder.CircuitBreakerAsync(
                     clientConfig.BeforeCircuitBreakerCnt,
                     TimeSpan.FromSeconds(clientConfig.DurationOfBreakInSeconds)))
-                .AddPolicyHandler(Policy.HandleResult<HttpResponseMessage>(r => r.StatusCode == HttpStatusCode.TooManyRequests || r.StatusCode == HttpStatusCode.InternalServerError) // Retry on TooManyRequests
-                    .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)))); // exponential back-off retry strategy;
+                .AddHttpMessageHandler(() =>
+                    new RateLimitHttpMessageHandler(
+                        limitCount: 10,
+                        limitTime: TimeSpan.FromSeconds(1)))
+                .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
+                .AddPolicyHandler(Policy.HandleResult<HttpResponseMessage>(r =>
+                        r.StatusCode == HttpStatusCode.TooManyRequests ||
+                        r.StatusCode == HttpStatusCode.InternalServerError)
+                    .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)))); // exponential back-off retry strategy;;
             services.AddSingleton<IWebClientConfig>(sp => clients);
         }
     

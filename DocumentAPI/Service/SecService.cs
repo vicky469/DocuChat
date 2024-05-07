@@ -118,7 +118,7 @@ public class SecService : ISecService
     public async Task<IResult> BatchGetDocumentUrls(SecBatchGetUrlsRequest request)
     {
         var finalUrls = new List<string>();
-        var companies = await CIKLookup(50);
+        var companies = await CIKLookup(request.Size);
         
         if(request?.CompanyList == null || request.CompanyList.Count == 0)
         {
