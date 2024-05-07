@@ -13,6 +13,9 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
 4. Run the project.
    
    <img src="./swagger.png" width="50%" height="50%">
+   ![image](https://github.com/vicky469/DocumentAPI/assets/127980880/e3ba63a3-4add-41d9-a88d-299b7d628ed2)
+   ![image](https://github.com/vicky469/DocumentAPI/assets/127980880/f5db0aeb-3256-497a-a9ed-147843f0d8c3)
+
 
 ## How It was built
 ### Analysis
