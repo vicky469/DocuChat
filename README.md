@@ -33,17 +33,17 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
    "secDocumentTypeEnum": 1
    }'
    ```
-    <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/e3ba63a3-4add-41d9-a88d-299b7d628ed2" width="50%" height="50%">
+   <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/f5db0aeb-3256-497a-a9ed-147843f0d8c3" width="50%" height="50%">
+
    
    ### BatchGetDocumentUrls
-   ### ParseDocuments
    ``` bash
    curl --location 'http://localhost:5084/api/sec/batch-get-sec-urls?formType=1&startDate=2019-04-30&endDate=2024-04-30' \
    --header 'accept: */*'
    }'
    ```
-    <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/f5db0aeb-3256-497a-a9ed-147843f0d8c3" width="50%" height="50%">
-
+   <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/e3ba63a3-4add-41d9-a88d-299b7d628ed2" width="50%" height="50%">
+   
 
 
 ## How It was built
