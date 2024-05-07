@@ -13,9 +13,35 @@ Document API is a simple tool designed to parse SEC (Securities and Exchange Com
 4. Run the project.
    
    <img src="./swagger.png" width="50%" height="50%">
+   
    ### ParseDocuments
+   ``` bash
+   curl --location 'http://localhost:5084/api/sec/sec-parser' \
+   --header 'accept: */*' \
+   --header 'Content-Type: application/json' \
+   --header 'X-CALLING-APP: CompanyA' \
+   --data '{
+   "secDocumentUrls": [
+   "https://www.sec.gov/Archives/edgar/data/320193/000032019319000119/a10-k20199282019.htm",
+   "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+   "https://www.sec.gov/Archives/edgar/data/320193/000032019322000108/aapl-20220924.htm",
+   "https://www.sec.gov/Archives/edgar/data/320193/000032019321000105/aapl-20210925.htm",
+   "https://www.sec.gov/Archives/edgar/data/320193/000032019320000096/aapl-20200926.htm",
+   "https://www.sec.gov/Archives/edgar/data/789019/000156459020034944/msft-10k_20200630.htm",
+   "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm"
+   ],
+   "secDocumentTypeEnum": 1
+   }'
+   ```
     <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/e3ba63a3-4add-41d9-a88d-299b7d628ed2" width="50%" height="50%">
+   
    ### BatchGetDocumentUrls
+   ### ParseDocuments
+   ``` bash
+   curl --location 'http://localhost:5084/api/sec/batch-get-sec-urls?formType=1&startDate=2019-04-30&endDate=2024-04-30' \
+   --header 'accept: */*'
+   }'
+   ```
     <img src="https://github.com/vicky469/DocumentAPI/assets/127980880/f5db0aeb-3256-497a-a9ed-147843f0d8c3" width="50%" height="50%">
 
 
