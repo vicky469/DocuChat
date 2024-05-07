@@ -1,5 +1,5 @@
-# DocumentAPI
-Document API is a simple tool designed to parse SEC (Securities and Exchange Commission) EDGAR data. It is built using the latest .NET 8 Minimal API, providing a lean and efficient framework for building HTTP APIs.  
+# DocuChat
+DocuChat is a full-stack web application developed using C#, .NET 8.0, and Blazor. The goal is to provide a cost-effective chat interface for users to interact with documents. It will prioritize accuracy, minimize errors, and aim to deliver a high-quality user experience.
 ## Features
 - Parses SEC documents and extracts relevant data. (build in progress)
 - Use LLM and RAG to develop a chatbot capable of interpreting and responding to queries based on information extracted from SEC documents. (coming soon)
