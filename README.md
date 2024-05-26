@@ -1,5 +1,5 @@
 # DocuChat
-DocuChat is a full-stack web application developed using C#, .NET 8.0, and Blazor. The goal is to provide a cost-effective chat interface for users to interact with documents. It will prioritize accuracy, minimize errors, and aim to deliver a high-quality user experience.
+DocuChat is a full-stack web application developed using C#, .NET 8.0, and Blazor. The goal is to provide a cost-effective chat interface for users to interact with documents. It will prioritize data accuracy, minimize errors, and aim to deliver a high-quality user experience.
 ## Features
 - Parses SEC documents and extracts relevant data. (build in progress)
 - Use LLM and RAG to develop a chatbot capable of interpreting and responding to queries based on information extracted from SEC documents. (coming soon)
