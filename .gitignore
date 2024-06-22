@@ -3,3 +3,11 @@ obj/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+.env
+data/
+Data/
+
+.DS_Store
+*.user
+*.name
+.idea/

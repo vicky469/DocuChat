@@ -1,20 +1,36 @@
 ﻿@page "/documents"
 @rendermode InteractiveServer
 
+<MudThemeProvider />
 <PageTitle>Documents</PageTitle>
 
 <h1>Documents</h1>
 
-<p role="status">Current count: @currentCount</p>
-
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+<MudSelect T="DocumentUrl" Label="Pizza" Variant="Variant.Filled" AnchorOrigin="Origin.BottomCenter">
+    <MudSelectItem Value="@(new DocumentUrl("Cardinale"))" />
+    <MudSelectItem Value="@(new DocumentUrl("Diavolo"))" />
+    <MudSelectItem Value="@(new DocumentUrl("Margarita"))" />
+    <MudSelectItem Value="@(new DocumentUrl("Spinaci"))" />
+</MudSelect>
 
 @code {
-    private int currentCount = 0;
-
-    private void IncrementCount()
+    public class DocumentUrl
     {
-        currentCount++;
-    }
+        public string Url { get; }
+        public DocumentUrl(string url)
+        {
+            Url = url;
+        }
+        // Note: this is important so the MudSelect can compare pizzas
+        public override bool Equals(object o)
+        {
+            var other = o as DocumentUrl;
+            return other?.Url == Url;
+        }
 
+        // Note: this is important too!
+        public override int GetHashCode() => Url?.GetHashCode() ?? 0;
+
+        public override string ToString() => Url;
+    }
 }

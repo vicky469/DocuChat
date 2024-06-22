@@ -42,16 +42,14 @@ public class SecService : ISecService
             ItemsToInclude =
             [
                 "Item1", // Business
-                "Item1A", // Risk Factors
-                "Item2", // Properties
-                "Item3", // Legal Proceedings
+                "Item1A", // Risk Factor,
                 "Item7", // Management’s Discussion and Analysis of Financial Condition and Results of Operations
                 "Item7A", // Quantitative and Qualitative Disclosures about Market Risk
-                "Item9A"
             ];
         }
         else
         {
+            // return everything
             ItemsToInclude = new HashSet<string>(Enum.GetValues(typeof(Sec10KFormSectionEnum))
                 .Cast<Sec10KFormSectionEnum>()
                 .Select(item => item.ToString() + "."));
